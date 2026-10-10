@@ -1,27 +1,25 @@
 import pytest
 from app import create_app
+from app.config import TestConfig
 from app.extensions import db
 
-
-@pytest.fixture(scope='session')
+@pytest.fixture
 def app():
-    """Create and configure a testing Flask application."""
-    test_app = create_app('testing')
-    return test_app
+    """Create and configure a new app instance for each test."""
+    app = create_app(TestConfig)
 
+    with app.app_context():
+        db.create_all()
+        yield app
+        db.session.remove()
+        db.drop_all()
 
-@pytest.fixture(scope='function')
+@pytest.fixture
 def client(app):
     """A test client for the app."""
-    with app.test_client() as test_client:
-        with app.app_context():
-            db.create_all()
-            yield test_client
-            db.session.remove()
-            db.drop_all()
+    return app.test_client()
 
-
-@pytest.fixture(scope='function')
-def runner(app):
-    """A test CLI runner for the app."""
-    return app.test_cli_runner()
+@pytest.fixture
+def init_database(app):
+    """Fixture to pre-populate db if needed."""
+    return db

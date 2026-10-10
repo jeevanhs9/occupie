@@ -1,67 +1,56 @@
 import os
-from flask import Flask
-from config import config_by_name
-from app.extensions import db, migrate, jwt, cors
-from app.middleware.errors import register_error_handlers
-from app.routes import api_v1_bp
+import logging
+from flask import Flask, jsonify
 
+from app.extensions import db, migrate, jwt
+from app.config import Config
+from app import models
 
-def create_app(config_name=None):
-    """
-    Application factory pattern for Occupie API.
-    Initializes Flask application, configurations, extensions, and route blueprints.
-    """
-    if config_name is None:
-        config_name = os.environ.get('FLASK_ENV', 'development').lower()
-
+def create_app(config_class=Config):
     app = Flask(__name__)
-
-    # Load configuration
-    config_class = config_by_name.get(config_name, config_by_name['default'])
     app.config.from_object(config_class)
-    app.config['ENV_NAME'] = config_name
-
-    if config_name == 'production':
-        app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
-        app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY')
-        app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
-        secret_keys = ('SECRET_KEY', 'JWT_SECRET_KEY')
-        missing = [key for key in (*secret_keys, 'SQLALCHEMY_DATABASE_URI') if not app.config.get(key)]
-        if missing:
-            raise RuntimeError(
-                'Production configuration requires environment values for: '
-                + ', '.join(missing)
-            )
-        weak_secrets = [
-            key for key in secret_keys
-            if len(app.config[key]) < 32 or app.config[key].lower().startswith(('change-in-production', 'replace-with'))
-        ]
-        if weak_secrets:
-            raise RuntimeError(
-                'Production secrets must be at least 32 characters and must not be example placeholders: '
-                + ', '.join(weak_secrets)
-            )
 
     # Initialize extensions
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
 
-    # Restrict CORS to configured frontend origin
-    frontend_origin = app.config.get('FRONTEND_ORIGIN', 'http://localhost:5173')
-    cors.init_app(app, resources={
-        r"/api/*": {
-            "origins": [frontend_origin],
-            "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-            "allow_headers": ["Content-Type", "Authorization"],
-            "supports_credentials": True
-        }
-    })
+    # Configure logging
+    if not app.debug and not app.testing:
+        # In a real app we might configure file handlers here
+        logging.basicConfig(level=logging.INFO)
 
-    # Register centralized error handlers
+    # Register centralization error handlers
     register_error_handlers(app)
 
-    # Register versioned API blueprint
-    app.register_blueprint(api_v1_bp)
+    # Register Blueprints
+    from app.routes.health import health_bp
+    app.register_blueprint(health_bp, url_prefix='/api')
+
+    from app.routes.auth import auth_bp
+    app.register_blueprint(auth_bp, url_prefix='/api/auth')
+
+    from app.routes.tables import tables_bp
+    app.register_blueprint(tables_bp, url_prefix='/api/tables')
+
+    from app.routes.reservations import reservations_bp
+    app.register_blueprint(reservations_bp, url_prefix='/api/reservations')
+
+    from app.routes.allocations import allocations_bp
+    app.register_blueprint(allocations_bp, url_prefix='/api/allocations')
 
     return app
+
+def register_error_handlers(app):
+    @app.errorhandler(400)
+    def bad_request(e):
+        return jsonify(error="Bad Request", message=str(e.description)), 400
+
+    @app.errorhandler(404)
+    def not_found(e):
+        return jsonify(error="Not Found", message="The requested resource was not found."), 404
+
+    @app.errorhandler(500)
+    def internal_error(e):
+        app.logger.error(f"Internal Server Error: {e}")
+        return jsonify(error="Internal Server Error", message="An unexpected error occurred."), 500
