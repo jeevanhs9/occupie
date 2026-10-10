@@ -5,7 +5,7 @@ def test_register(client):
     """Test user registration."""
     response = client.post('/api/auth/register', json={
         "email": "test@example.com",
-        "password": "password123"
+        "password": "Password_123"
     })
     assert response.status_code == 201
     assert User.query.filter_by(email="test@example.com").first() is not None
@@ -14,7 +14,7 @@ def test_register_invalid_email(client):
     """Test registration with invalid email."""
     response = client.post('/api/auth/register', json={
         "email": "invalidemail",
-        "password": "password123"
+        "password": "Password_123"
     })
     assert response.status_code == 400
 
@@ -22,11 +22,11 @@ def test_login_success(client):
     """Test login with correct credentials."""
     client.post('/api/auth/register', json={
         "email": "login@example.com",
-        "password": "password123"
+        "password": "Password_123"
     })
     response = client.post('/api/auth/login', json={
         "email": "login@example.com",
-        "password": "password123"
+        "password": "Password_123"
     })
     assert response.status_code == 200
     assert "access_token" in response.get_json()
@@ -36,7 +36,7 @@ def test_login_invalid(client):
     """Test login with wrong password."""
     client.post('/api/auth/register', json={
         "email": "login@example.com",
-        "password": "password123"
+        "password": "Password_123"
     })
     response = client.post('/api/auth/login', json={
         "email": "login@example.com",
@@ -48,11 +48,11 @@ def test_me_protected(client):
     """Test access to /me with valid token."""
     client.post('/api/auth/register', json={
         "email": "me@example.com",
-        "password": "password123"
+        "password": "Password_123"
     })
     login_res = client.post('/api/auth/login', json={
         "email": "me@example.com",
-        "password": "password123"
+        "password": "Password_123"
     })
     token = login_res.get_json()["access_token"]
 

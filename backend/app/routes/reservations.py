@@ -18,35 +18,42 @@ def create_reservation():
 
     start_time = datetime.fromisoformat(data['start_time'])
     end_time = datetime.fromisoformat(data['end_time'])
-    table_id = data.get('table_id')
+    table_ids = data.get('table_ids', [])
+    if 'table_id' in data:
+        table_ids.append(data['table_id'])
 
-    # Concurrency Protection: Lock the table row first, then check conflicts
-    if table_id:
-        # Lock the table row to serialize access
+    # Concurrency Protection: Lock the table rows first, then check conflicts
+    tables_to_book = []
+    if table_ids:
         from app.models import RestaurantTable
-        table = db.session.query(RestaurantTable).with_for_update().get(table_id)
-        if not table:
-            return jsonify(message="Table not found"), 404
+        # Lock all requested tables
+        for tid in table_ids:
+            table = db.session.query(RestaurantTable).with_for_update().get(tid)
+            if not table:
+                return jsonify(message=f"Table {tid} not found"), 404
+            tables_to_book.append(table)
 
-        overlapping = Reservation.query.filter(
-            Reservation.table_id == table_id,
-            Reservation.start_time < end_time,
-            Reservation.end_time > start_time,
-            Reservation.status.in_(['confirmed', 'seated'])
-        ).with_for_update().first()
+            overlapping = Reservation.query.join(Reservation.tables).filter(
+                RestaurantTable.id == tid,
+                Reservation.start_time < end_time,
+                Reservation.end_time > start_time,
+                Reservation.status.in_(['confirmed', 'seated'])
+            ).first()
 
-        if overlapping:
-            db.session.rollback()
-            return jsonify(message="Table already booked for this time"), 409
+            if overlapping:
+                db.session.rollback()
+                return jsonify(message=f"Table {tid} already booked for this time"), 409
 
     new_res = Reservation(
         restaurant_id=data['restaurant_id'],
         user_id=user_id,
-        table_id=table_id,
         party_size=data['party_size'],
         start_time=start_time,
         end_time=end_time
     )
+    # Assign the tables relationship
+    new_res.tables = tables_to_book
+
     db.session.add(new_res)
     db.session.commit()
     return jsonify(id=new_res.id, status=new_res.status), 201

@@ -2,7 +2,7 @@ import os
 import logging
 from flask import Flask, jsonify
 
-from app.extensions import db, migrate, jwt
+from app.extensions import db, migrate, jwt, limiter, cors
 from app.config import Config
 from app import models
 
@@ -14,10 +14,11 @@ def create_app(config_class=Config):
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
+    limiter.init_app(app)
+    cors.init_app(app)
 
     # Configure logging
     if not app.debug and not app.testing:
-        # In a real app we might configure file handlers here
         logging.basicConfig(level=logging.INFO)
 
     # Register centralization error handlers
@@ -38,6 +39,19 @@ def create_app(config_class=Config):
 
     from app.routes.allocations import allocations_bp
     app.register_blueprint(allocations_bp, url_prefix='/api/allocations')
+
+    from app.routes.waitlist import waitlist_bp
+    app.register_blueprint(waitlist_bp, url_prefix='/api/waitlist')
+
+    from app.routes.analytics import analytics_bp
+    app.register_blueprint(analytics_bp, url_prefix='/api/analytics')
+
+    from app.routes.simulations import simulations_bp
+    app.register_blueprint(simulations_bp, url_prefix='/api/simulations')
+
+    # Register CLI commands
+    from app.commands import process_no_shows_command
+    app.cli.add_command(process_no_shows_command)
 
     return app
 

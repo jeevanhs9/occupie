@@ -9,6 +9,11 @@ auth_bp = Blueprint('auth', __name__)
 def is_valid_email(email):
     return re.match(r"[^@]+@[^@]+\.[^@]+", email)
 
+def is_valid_password(password):
+    # Min 8 chars, at least one letter, one number, and one underscore
+    pattern = r"^(?=.*[A-Za-z])(?=.*\d)(?=.*_)[A-Za-z\d_]{8,}$"
+    return re.match(pattern, password)
+
 @auth_bp.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
@@ -17,6 +22,9 @@ def register():
 
     if not email or not password or not is_valid_email(email):
         return jsonify(message="Invalid email or password format"), 400
+
+    if not is_valid_password(password):
+        return jsonify(message="Password must be at least 8 characters long and contain letters, numbers, and an underscore"), 400
 
     if User.query.filter_by(email=email).first():
         return jsonify(message="Email already registered"), 409

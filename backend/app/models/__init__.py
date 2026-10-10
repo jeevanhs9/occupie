@@ -11,7 +11,7 @@ class User(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     def set_password(self, password):
-        self.password_hash = generate_password_hash(password)
+        self.password_hash = generate_password_hash(password, method='pbkdf2:sha256')
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
@@ -30,16 +30,25 @@ class RestaurantTable(db.Model):
     capacity = db.Column(db.Integer, nullable=False)
     status = db.Column(db.String(20), default='available') # available, occupied, cleaning, maintenance
 
+# Junction table for Reservation <-> RestaurantTable (Multiple tables per reservation)
+reservation_tables = db.Table('reservation_tables',
+    db.Column('reservation_id', db.Integer, db.ForeignKey('reservations.id'), primary_key=True),
+    db.Column('table_id', db.Integer, db.ForeignKey('restaurant_tables.id'), primary_key=True)
+)
+
 class Reservation(db.Model):
     __tablename__ = 'reservations'
     id = db.Column(db.Integer, primary_key=True)
     restaurant_id = db.Column(db.Integer, db.ForeignKey('restaurants.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    table_id = db.Column(db.Integer, db.ForeignKey('restaurant_tables.id'), nullable=True)
+    # table_id is now nullable as we use the junction table
     party_size = db.Column(db.Integer, nullable=False)
     start_time = db.Column(db.DateTime(timezone=True), nullable=False)
     end_time = db.Column(db.DateTime(timezone=True), nullable=False)
-    status = db.Column(db.String(20), default='confirmed') # confirmed, seated, completed, cancelled, no-show
+    status = db.Column(db.String(20), default='confirmed')
+
+    # Relationship to multiple tables
+    tables = db.relationship('RestaurantTable', secondary=reservation_tables, backref='reservations')
 
 class WaitlistEntry(db.Model):
     __tablename__ = 'waitlist_entries'
