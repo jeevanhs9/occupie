@@ -31,7 +31,7 @@ export function RoleSelectPage() {
   };
 
   return (
-    <div className="min-h-screen bg-occupie-navy-950 text-slate-100 py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden flex flex-col justify-center">
+    <div className="role-sandbox-page min-h-screen py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden flex flex-col justify-center">
       {/* Background ambient lighting */}
       <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[700px] h-[700px] bg-occupie-teal-500/10 rounded-full blur-[160px] pointer-events-none" />
 
@@ -50,7 +50,7 @@ export function RoleSelectPage() {
         {/* Header Title */}
         <div className="text-center mb-10">
           <div className="inline-block mb-3">
-            <Logo size="lg" theme="light" withLink={false} />
+            <Logo size="lg" theme="dark" withLink={false} />
           </div>
           <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
             Role Sandbox & UI Preview

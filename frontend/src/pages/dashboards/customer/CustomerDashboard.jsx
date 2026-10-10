@@ -5,6 +5,7 @@ import { Button } from '../../../components/ui/Button';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { Input } from '../../../components/ui/Input';
 import { OperationalDataStatus } from '../../../components/common/OperationalDataStatus';
+import { OccupieChat } from '../../../components/common/OccupieChat';
 import { useOperationalData } from '../../../hooks/useOperationalData';
 import { useRole } from '../../../hooks/useRole';
 import { MOCK_RESTAURANT_INFO } from '../../../services/mockData';
@@ -252,6 +253,11 @@ export function CustomerDashboard() {
           onAction={handleBookTable}
         />
       </div>
+      <OccupieChat
+        reservations={reservations}
+        userName={user?.name || ''}
+        onBookTable={handleBookTable}
+      />
     </div>
   );
 }
