@@ -101,4 +101,4 @@ Operation errors include:
 }
 ```
 
-Business conflicts use 409; missing resources use 404; invalid input uses 422; malformed requests use 400. The application-level error handler also returns JSON for common HTTP errors. No JWT endpoints are implemented yet.
+Business conflicts use 409; missing resources use 404; invalid input uses 422; malformed requests use 400. The application-level error handler also returns JSON for common HTTP errors. Basic register, login, and token introspection endpoints are available under `/api/auth`; `/api/v1` operational endpoints do not currently require a token or enforce roles.

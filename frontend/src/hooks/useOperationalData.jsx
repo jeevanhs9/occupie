@@ -167,6 +167,35 @@ export function useOperationalData() {
     return { success: true };
   }, [demoMode]);
 
+  const recommendReservation = useCallback(async ({ partySize, startsAt, seatingPreference }) => {
+    if (!demoMode) {
+      const result = await apiService.allocations.getRecommendations({
+        partySize,
+        at: startsAt,
+        preferredSection: seatingPreference,
+      });
+      if (!result.success) {
+        setError(resultError(result));
+        return result;
+      }
+      if (!result.data?.available || !result.data.recommendation) {
+        return { success: false, error: result.data?.message || 'No suitable table is available.' };
+      }
+      return { success: true, data: { recommendation: result.data.recommendation } };
+    }
+
+    const recommendation = recommendTable({
+      tables,
+      reservations,
+      partySize,
+      at: startsAt,
+      preferredSection: seatingPreference,
+    });
+    return recommendation.table
+      ? { success: true, data: { recommendation: recommendation.table } }
+      : { success: false, error: recommendation.reason };
+  }, [demoMode, reservations, tables]);
+
   const createReservation = useCallback(async (reservation) => {
     if (!demoMode) {
       const result = await apiService.reservations.create(reservation);
@@ -180,10 +209,11 @@ export function useOperationalData() {
     }
 
     const { table, reason } = recommendTable({
-      tables,
+      tables: reservation.tableId ? tables.filter((item) => item.id === reservation.tableId) : tables,
       reservations,
       partySize: reservation.partySize,
       at: reservation.startsAt,
+      preferredSection: reservation.seatingPreference,
     });
     if (!table) return { success: false, error: reason };
     const created = {
@@ -264,9 +294,9 @@ export function useOperationalData() {
     createWaitlistEntry,
     seatWaitlistEntry,
     updateWaitlistStatus,
+    recommendReservation,
     createReservation,
     seatReservation,
     updateReservationStatus,
   };
 }
-

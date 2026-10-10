@@ -49,6 +49,16 @@ describe('Occupie operational preview flows', () => {
     expect(await screen.findByRole('status')).toHaveTextContent(/Seated Patel Group at T14/);
   });
 
+  it('shows a table recommendation before confirming a customer reservation', async () => {
+    render(withRole(<CustomerDashboard />));
+    fireEvent.click(screen.getByRole('button', { name: 'Reserve a Table' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Find a Table' }));
+
+    expect(await screen.findByText(/Suggested table:/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Confirm Table/ }));
+    expect(await screen.findByRole('status')).toHaveTextContent(/Reservation confirmed/);
+  });
+
   it('renders each role dashboard through its configured route', () => {
     const roleRoutes = [
       ['/dashboard/manager', 'Restaurant Operations Hub'],

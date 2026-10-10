@@ -9,23 +9,50 @@ export default {
     extend: {
       colors: {
         occupie: {
+          burgundy: {
+            950: '#160e11',
+            900: '#28151b',
+            800: '#48222e',
+            700: '#672b3c',
+            600: '#874254',
+            200: '#dcc7cb',
+            50: '#f7f0f1',
+          },
+          walnut: {
+            950: '#110e0e',
+            900: '#191315',
+            850: '#261b1e',
+            800: '#332226',
+            700: '#493138',
+            600: '#60464c',
+          },
+          brass: {
+            300: '#e2d1aa',
+            400: '#d5bf8b',
+            500: '#b4945a',
+            600: '#927342',
+          },
+          ivory: '#f3eee5',
+          cream: '#fbf8f2',
+          taupe: '#786e64',
+          // Compatibility aliases used by the existing app components.
           navy: {
-            950: '#050914',
-            900: '#0A1124',
-            850: '#0F1832',
-            800: '#172346',
-            700: '#233462',
-            600: '#344C88',
+            950: '#110e0e',
+            900: '#191315',
+            850: '#261b1e',
+            800: '#48222e',
+            700: '#672b3c',
+            600: '#874254',
           },
           teal: {
-            400: '#2DD4BF',
-            500: '#14B8A6',
-            600: '#0D9488',
+            400: '#d5bf8b',
+            500: '#b4945a',
+            600: '#927342',
           },
           cyan: {
-            400: '#38BDF8',
-            500: '#0EA5E9',
-            600: '#0284C7',
+            400: '#e2d1aa',
+            500: '#b4945a',
+            600: '#927342',
           },
           amber: {
             400: '#FBBF24',
@@ -42,13 +69,19 @@ export default {
       },
       fontFamily: {
         sans: ['Plus Jakarta Sans', 'Inter', 'system-ui', 'sans-serif'],
-        display: ['Plus Jakarta Sans', 'system-ui', 'sans-serif'],
+        display: ['Georgia', 'Times New Roman', 'serif'],
+      },
+      borderRadius: {
+        lg: '0.55rem',
+        xl: '0.7rem',
+        '2xl': '0.85rem',
+        '3xl': '1rem',
       },
       boxShadow: {
-        'card': '0 4px 20px -2px rgba(10, 17, 36, 0.05), 0 2px 6px -1px rgba(10, 17, 36, 0.02)',
-        'card-hover': '0 12px 32px -4px rgba(10, 17, 36, 0.12), 0 4px 12px -2px rgba(10, 17, 36, 0.04)',
-        'glow-teal': '0 0 24px -4px rgba(20, 184, 166, 0.25)',
-        'glow-cyan': '0 0 24px -4px rgba(14, 165, 233, 0.25)',
+        'card': '0 2px 10px -4px rgba(37, 29, 18, 0.12), 0 1px 3px rgba(37, 29, 18, 0.04)',
+        'card-hover': '0 12px 26px -12px rgba(37, 29, 18, 0.18), 0 2px 5px rgba(37, 29, 18, 0.05)',
+        'glow-teal': '0 2px 12px -4px rgba(103, 43, 60, 0.2)',
+        'glow-cyan': '0 2px 12px -4px rgba(180, 148, 90, 0.18)',
       }
     },
   },

@@ -1,57 +1,83 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { ROLES, ROLE_CONFIGS } from '../lib/constants';
+import { apiService, DATA_MODE } from '../services/api';
 
 const RoleContext = createContext(null);
-
 const DEMO_USERS = {
-  [ROLES.MANAGER]: { name: 'Elena Vance', email: 'manager@occupie.local', role: ROLES.MANAGER, title: 'General Operations Manager' },
-  [ROLES.HOST]: { name: 'Julian Mercer', email: 'host@occupie.local', role: ROLES.HOST, title: 'Lead Maître D’ & Receptionist' },
-  [ROLES.FLOOR_STAFF]: { name: 'Marco Rodriguez', email: 'staff@occupie.local', role: ROLES.FLOOR_STAFF, title: 'Floor Captain - Station A' },
-  [ROLES.CUSTOMER]: { name: 'Dr. Michael Chen', email: 'guest@occupie.local', role: ROLES.CUSTOMER, title: 'Valued Dining Guest' },
+  [ROLES.MANAGER]: { name: 'Demo Manager', email: 'manager@occupie.local', role: ROLES.MANAGER, title: 'General Operations Manager' },
+  [ROLES.HOST]: { name: 'Demo Host', email: 'host@occupie.local', role: ROLES.HOST, title: 'Lead Host' },
+  [ROLES.FLOOR_STAFF]: { name: 'Demo Floor Staff', email: 'staff@occupie.local', role: ROLES.FLOOR_STAFF, title: 'Floor Staff' },
+  [ROLES.CUSTOMER]: { name: 'Demo Customer', email: 'guest@occupie.local', role: ROLES.CUSTOMER, title: 'Dining Guest' },
 };
 
-export function RoleProvider({ children }) {
-  const [currentRole, setCurrentRole] = useState(() => {
-    return localStorage.getItem('occupie_demo_role') || ROLES.MANAGER;
-  });
+const isDemoMode = DATA_MODE === 'demo';
 
-  const [user, setUser] = useState(DEMO_USERS[currentRole] || DEMO_USERS[ROLES.MANAGER]);
+export function RoleProvider({ children }) {
+  const [demoRole, setDemoRole] = useState(() => isDemoMode
+    ? (localStorage.getItem('occupie_demo_role') || ROLES.CUSTOMER)
+    : ROLES.CUSTOMER);
+  const [user, setUser] = useState(() => isDemoMode ? (DEMO_USERS[demoRole] || DEMO_USERS[ROLES.CUSTOMER]) : null);
+  const [loading, setLoading] = useState(!isDemoMode);
+  const [authError, setAuthError] = useState(null);
 
   useEffect(() => {
-    localStorage.setItem('occupie_demo_role', currentRole);
-    setUser(DEMO_USERS[currentRole] || DEMO_USERS[ROLES.MANAGER]);
-  }, [currentRole]);
-
-  const switchRole = (newRole) => {
-    if (ROLE_CONFIGS[newRole]) {
-      setCurrentRole(newRole);
+    if (isDemoMode) {
+      localStorage.setItem('occupie_demo_role', demoRole);
+      setUser(DEMO_USERS[demoRole] || DEMO_USERS[ROLES.CUSTOMER]);
+      return undefined;
     }
+    localStorage.removeItem('occupie_demo_role');
+    let active = true;
+    apiService.auth.restore().then((result) => {
+      if (!active) return;
+      setUser(result.success ? result.data.user : null);
+      setAuthError(result.success ? null : result.error);
+      setLoading(false);
+    });
+    return () => { active = false; };
+  }, [demoRole]);
+
+  const switchRole = (nextRole) => {
+    if (isDemoMode && ROLE_CONFIGS[nextRole]) setDemoRole(nextRole);
   };
 
-  const loginAsRole = (role) => {
-    switchRole(role);
+  const login = async (credentials) => {
+    const result = await apiService.auth.login(credentials);
+    if (result.success) {
+      setUser(result.data.user);
+      setAuthError(null);
+      setLoading(false);
+    }
+    return result;
   };
 
-  return (
-    <RoleContext.Provider
-      value={{
-        currentRole,
-        user,
-        roleConfig: ROLE_CONFIGS[currentRole],
-        switchRole,
-        loginAsRole,
-        isDemoMode: true,
-      }}
-    >
-      {children}
-    </RoleContext.Provider>
-  );
+  const logout = async () => {
+    const result = await apiService.auth.logout();
+    setUser(null);
+    setAuthError(null);
+    return result;
+  };
+
+  const currentRole = isDemoMode ? demoRole : (user?.role || ROLES.CUSTOMER);
+  const value = useMemo(() => ({
+    currentRole,
+    user,
+    roleConfig: ROLE_CONFIGS[currentRole] || null,
+    switchRole,
+    loginAsRole: switchRole,
+    login,
+    logout,
+    loading,
+    authError,
+    isAuthenticated: isDemoMode || Boolean(user),
+    isDemoMode,
+  }), [currentRole, user, loading, authError]);
+
+  return <RoleContext.Provider value={value}>{children}</RoleContext.Provider>;
 }
 
 export function useRole() {
   const context = useContext(RoleContext);
-  if (!context) {
-    throw new Error('useRole must be used within a RoleProvider');
-  }
+  if (!context) throw new Error('useRole must be used within a RoleProvider');
   return context;
 }

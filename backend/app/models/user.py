@@ -17,6 +17,12 @@ class User(db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(256), nullable=False)
     role = db.Column(db.String(32), nullable=False, default='customer')
+    email_verified_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    verification_token_hash = db.Column(db.String(64), nullable=True, index=True)
+    verification_expires_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    password_reset_token_hash = db.Column(db.String(64), nullable=True, index=True)
+    password_reset_expires_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    auth_version = db.Column(db.Integer, nullable=False, default=1)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
     def __init__(self, name, email, role='customer', password=None):
@@ -35,9 +41,9 @@ class User(db.Model):
 
     def set_password(self, password):
         """Hashes password securely using Werkzeug."""
-        if not password or len(password) < 6:
-            raise ValueError("Password must be at least 6 characters long.")
-        self.password_hash = generate_password_hash(password)
+        if not password or len(password) < 12 or len(password) > 128:
+            raise ValueError("Password must be between 12 and 128 characters long.")
+        self.password_hash = generate_password_hash(password, method='scrypt')
 
     def check_password(self, password):
         """Verifies candidate password against stored hash."""

@@ -31,15 +31,19 @@ export function RoleSelectPage() {
   };
 
   return (
+<<<<<<< Updated upstream
     <div className="role-sandbox-page min-h-screen py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden flex flex-col justify-center">
+=======
+    <div className="auth-page min-h-screen text-slate-100 py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden flex flex-col justify-center">
+>>>>>>> Stashed changes
       {/* Background ambient lighting */}
-      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[700px] h-[700px] bg-occupie-teal-500/10 rounded-full blur-[160px] pointer-events-none" />
+      <div className="ambient-orb absolute top-1/3 left-1/2 -translate-x-1/2 w-[700px] h-[700px] bg-occupie-teal-500/10 rounded-full blur-[160px] pointer-events-none" />
 
       {/* Top back navigation */}
       <div className="absolute top-6 left-6 z-20">
         <Link
           to="/"
-          className="inline-flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors bg-occupie-navy-900/80 px-3 py-1.5 rounded-xl border border-occupie-navy-800"
+          className="auth-back inline-flex items-center gap-2 text-xs font-semibold transition-colors px-3 py-1.5"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
           <span>Back to Home</span>
@@ -52,7 +56,8 @@ export function RoleSelectPage() {
           <div className="inline-block mb-3">
             <Logo size="lg" theme="dark" withLink={false} />
           </div>
-          <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+          <p className="auth-eyebrow mb-2">Occupie workspace</p>
+          <h2 className="auth-heading text-2xl sm:text-3xl font-black text-white tracking-tight">
             Role Sandbox & UI Preview
           </h2>
           <p className="text-xs sm:text-sm text-slate-400 mt-2 max-w-lg mx-auto">
@@ -77,7 +82,7 @@ export function RoleSelectPage() {
                 key={config.id}
                 type="button"
                 onClick={() => handleSelectRole(config.id)}
-                className="group w-full p-6 rounded-3xl bg-occupie-navy-900/80 border border-occupie-navy-800 hover:border-occupie-teal-500/50 hover:bg-occupie-navy-850 cursor-pointer transition-all duration-200 shadow-lg flex flex-col justify-between text-left focus:outline-none focus:ring-2 focus:ring-occupie-teal-400"
+                className="role-choice group w-full p-6 rounded-2xl cursor-pointer transition-colors duration-200 flex flex-col justify-between text-left focus:outline-none focus:ring-2 focus:ring-occupie-teal-400"
               >
                 <div>
                   <div className="flex items-start justify-between mb-4">

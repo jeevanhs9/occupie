@@ -12,7 +12,7 @@ export function Button({
   icon: Icon,
   ...props
 }) {
-  const baseStyles = 'inline-flex items-center justify-center font-medium transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed select-none active:scale-[0.98]';
+  const baseStyles = 'inline-flex items-center justify-center font-medium transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed select-none active:scale-[0.99]';
 
   const sizeStyles = {
     sm: 'text-xs px-3 py-1.5 rounded-lg gap-1.5',
@@ -21,10 +21,10 @@ export function Button({
   };
 
   const variantStyles = {
-    primary: 'bg-occupie-navy-900 text-white hover:bg-occupie-navy-800 focus:ring-occupie-cyan-500 shadow-sm border border-occupie-navy-700/60',
-    accent: 'bg-occupie-teal-500 text-occupie-navy-950 font-semibold hover:bg-occupie-teal-400 focus:ring-occupie-teal-400 shadow-md shadow-occupie-teal-500/20',
-    secondary: 'bg-white text-slate-700 hover:bg-slate-100 hover:text-slate-900 border border-slate-200 focus:ring-slate-400 shadow-sm',
-    outline: 'border border-slate-300 text-slate-700 hover:bg-slate-50 focus:ring-occupie-cyan-500',
+    primary: 'bg-occupie-burgundy-700 text-white hover:bg-occupie-burgundy-800 focus:ring-occupie-brass-400 shadow-sm border border-occupie-burgundy-600',
+    accent: 'bg-occupie-brass-500 text-occupie-walnut-950 font-semibold hover:bg-occupie-brass-400 focus:ring-occupie-brass-400 shadow-sm shadow-occupie-brass-500/20',
+    secondary: 'bg-occupie-cream text-slate-700 hover:bg-occupie-ivory hover:text-slate-900 border border-stone-300 focus:ring-occupie-brass-400 shadow-sm',
+    outline: 'border border-stone-300 text-slate-700 hover:bg-occupie-ivory focus:ring-occupie-brass-400',
     ghost: 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 focus:ring-slate-300',
     danger: 'bg-rose-600 text-white hover:bg-rose-700 focus:ring-rose-500 shadow-sm',
   };

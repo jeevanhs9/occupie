@@ -9,9 +9,9 @@ export function Card({
 }) {
   return (
     <div
-      className={`rounded-2xl border transition-all duration-200
-        ${glass ? 'glass-card-light' : 'bg-white border-slate-200/80 shadow-sm'}
-        ${hoverEffect ? 'hover:shadow-card-hover hover:border-slate-300' : ''}
+      className={`rounded-xl border transition-all duration-200
+        ${glass ? 'glass-card-light' : 'bg-occupie-cream border-stone-200 shadow-card'}
+        ${hoverEffect ? 'hover:shadow-card-hover hover:border-occupie-brass-400/70' : ''}
         ${className}`}
       {...props}
     >
@@ -22,7 +22,7 @@ export function Card({
 
 export function CardHeader({ children, className = '', action }) {
   return (
-    <div className={`p-5 sm:p-6 pb-2 border-b border-slate-100 flex items-start justify-between gap-4 ${className}`}>
+    <div className={`p-5 sm:p-6 pb-2 border-b border-stone-200/70 flex items-start justify-between gap-4 ${className}`}>
       <div className="space-y-1">{children}</div>
       {action && <div className="shrink-0">{action}</div>}
     </div>
@@ -31,7 +31,7 @@ export function CardHeader({ children, className = '', action }) {
 
 export function CardTitle({ children, className = '' }) {
   return (
-    <h3 className={`text-base sm:text-lg font-bold text-slate-900 tracking-tight ${className}`}>
+    <h3 className={`font-display text-lg sm:text-xl font-normal text-slate-900 tracking-tight ${className}`}>
       {children}
     </h3>
   );

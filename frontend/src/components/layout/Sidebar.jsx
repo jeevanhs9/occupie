@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink, Link, useLocation } from 'react-router-dom';
+import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useRole } from '../../hooks/useRole';
 import { ROLE_NAVIGATION, ROLE_CONFIGS } from '../../lib/constants';
 import Logo from '../common/Logo';
@@ -24,6 +24,7 @@ import {
   LogOut,
   ChevronRight,
   Store,
+  X,
 } from 'lucide-react';
 
 const ICON_MAP = {
@@ -47,7 +48,8 @@ const ICON_MAP = {
 };
 
 export function Sidebar({ isOpen, onClose }) {
-  const { currentRole, user, roleConfig } = useRole();
+  const { currentRole, user, roleConfig, logout, isDemoMode } = useRole();
+  const navigate = useNavigate();
   const location = useLocation();
   const navItems = ROLE_NAVIGATION[currentRole] || [];
 
@@ -55,20 +57,32 @@ export function Sidebar({ isOpen, onClose }) {
     <>
       {/* Mobile Backdrop */}
       {isOpen && (
-        <div
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 lg:hidden"
+        <button
+          type="button"
+          aria-label="Close navigation"
+          className="sidebar-scrim fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 lg:hidden"
           onClick={onClose}
         />
       )}
 
       <aside
-        className={`fixed top-0 bottom-0 left-0 z-50 w-72 bg-occupie-navy-900 text-slate-200 border-r border-occupie-navy-800 flex flex-col transition-transform duration-200 ease-in-out
-          ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        id="dashboard-navigation"
+        aria-label={`${roleConfig?.title || 'Occupie'} navigation`}
+        className={`fixed top-0 bottom-0 left-0 z-50 w-72 bg-occupie-walnut-900 text-slate-200 border-r border-occupie-walnut-800 flex flex-col transition-transform duration-200 ease-in-out
+          ${isOpen ? 'translate-x-0 visible' : '-translate-x-full invisible lg:visible lg:translate-x-0'}
         `}
       >
         {/* Brand Header */}
         <div className="p-6 border-b border-occupie-navy-800 flex items-center justify-between">
-          <Logo theme="light" withTagline={true} />
+          <Logo theme="light" size="md" />
+          <button
+            type="button"
+            className="sidebar-close lg:hidden"
+            onClick={onClose}
+            aria-label="Close navigation"
+          >
+            <X size={19} aria-hidden="true" />
+          </button>
         </div>
 
         {/* Current Active Location Pill */}
@@ -83,7 +97,7 @@ export function Sidebar({ isOpen, onClose }) {
         </div>
 
         {/* Role Navigation List */}
-        <div className="flex-1 overflow-y-auto px-4 py-5 space-y-1">
+        <nav className="flex-1 overflow-y-auto px-4 py-5 space-y-1" aria-label="Dashboard sections">
           <div className="px-3 pb-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
             {roleConfig?.badge || 'Navigation'}
           </div>
@@ -99,9 +113,9 @@ export function Sidebar({ isOpen, onClose }) {
                 to={item.path}
                 onClick={onClose}
                 className={() =>
-                  `flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                  `flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                     isItemActive
-                      ? 'bg-occupie-navy-800 text-white font-semibold shadow-sm border border-occupie-navy-700/60'
+                      ? 'bg-occupie-burgundy-800 text-white font-semibold shadow-sm border border-occupie-brass-500/30'
                       : 'text-slate-400 hover:text-slate-100 hover:bg-occupie-navy-850'
                   }`
                 }
@@ -113,7 +127,7 @@ export function Sidebar({ isOpen, onClose }) {
               </NavLink>
             );
           })}
-        </div>
+        </nav>
 
         {/* User Card & Logout */}
         <div className="p-4 border-t border-occupie-navy-800 bg-occupie-navy-950/40">
@@ -123,15 +137,13 @@ export function Sidebar({ isOpen, onClose }) {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-semibold text-white truncate">{user?.name}</p>
-              <p className="text-[11px] text-slate-400 truncate">{user?.title}</p>
+              <p className="text-[11px] text-slate-400 truncate">{roleConfig?.title}</p>
             </div>
-            <Link
-              to="/auth/login"
-              title="Switch user or logout"
-              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-occupie-navy-800 transition-colors"
-            >
+            {isDemoMode ? <Link to="/auth/demo-roles" title="Switch preview role" className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-occupie-navy-800 transition-colors">
               <LogOut className="w-4 h-4" />
-            </Link>
+            </Link> : <button type="button" onClick={async () => { await logout(); navigate('/auth/login', { replace: true }); }} title="Sign out" aria-label="Sign out" className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-occupie-navy-800 transition-colors">
+              <LogOut className="w-4 h-4" />
+            </button>}
           </div>
         </div>
       </aside>

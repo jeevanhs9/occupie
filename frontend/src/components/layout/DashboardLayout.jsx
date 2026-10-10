@@ -16,8 +16,17 @@ export function DashboardLayout({ children }) {
     target.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' });
   }, [location.hash, location.pathname]);
 
+  useEffect(() => {
+    if (!sidebarOpen) return undefined;
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setSidebarOpen(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [sidebarOpen]);
+
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
+    <div className="occupie-dashboard min-h-screen flex flex-col font-sans">
       {/* Top Demo Context Banner */}
       <RoleSwitcherBanner />
 
@@ -27,7 +36,7 @@ export function DashboardLayout({ children }) {
 
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col min-w-0 lg:pl-72">
-          <Topbar onMenuClick={() => setSidebarOpen(true)} />
+          <Topbar onMenuClick={() => setSidebarOpen((open) => !open)} sidebarOpen={sidebarOpen} />
 
           <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
             {children || <Outlet />}

@@ -9,6 +9,8 @@ class Reservation(db.Model):
     __tablename__ = 'reservations'
 
     id = db.Column(db.String(40), primary_key=True)
+    restaurant_id = db.Column(db.String(36), db.ForeignKey('restaurants.id'), nullable=False, default='default', index=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
     guest_name = db.Column(db.String(120), nullable=False)
     party_size = db.Column(db.Integer, nullable=False)
     starts_at = db.Column(db.DateTime(timezone=True), nullable=False, index=True)

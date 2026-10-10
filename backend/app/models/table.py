@@ -9,6 +9,7 @@ class RestaurantTable(db.Model):
     __tablename__ = 'restaurant_tables'
 
     id = db.Column(db.String(32), primary_key=True)
+    restaurant_id = db.Column(db.String(36), db.ForeignKey('restaurants.id'), nullable=False, default='default', index=True)
     name = db.Column(db.String(80), nullable=False)
     capacity = db.Column(db.Integer, nullable=False)
     section = db.Column(db.String(80), nullable=False, default='Main Dining')

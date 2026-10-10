@@ -19,11 +19,11 @@ Flask route → validation → allocation service (where needed) → SQLAlchemy 
 
 The frontend uses `src/services/api.js` for URL construction, JSON requests, and consistent failure results. `src/hooks/useOperationalData.jsx` selects the configured source and owns page-level operational state. A failed API request is not treated as success and does not switch modes.
 
-The Flask factory in `backend/app/__init__.py` configures SQLAlchemy, Flask-Migrate, JWT foundation, CORS, error handlers, and versioned blueprints. Operational endpoints are in `app/routes/operations.py`. Domain behavior lives in `app/services/allocation.py`; models are under `app/models/`.
+The Flask factory in `backend/app/__init__.py` configures SQLAlchemy, Flask-Migrate, JWT, JSON error handlers, a configured frontend-origin CORS allowlist, and versioned blueprints. Operational endpoints are in `app/routes/operations.py`. Domain behavior lives in `app/services/allocation.py`; models are under `app/models/`.
 
 ## Models
 
-- `User`: hashed-password and role foundation; no auth endpoints use it yet.
+- `User`: hashed-password and role model used by basic register, login, and token introspection endpoints under `/api/auth`.
 - `RestaurantTable`: capacity, section, current status, seated party, and server assignment.
 - `Reservation`: guest, party size, start time, table assignment, preference, and lifecycle status.
 - `WaitlistEntry`: walk-in party, status, enqueue time, and optional assigned table.
@@ -58,7 +58,7 @@ See [API_CONTRACT.md](API_CONTRACT.md) for schemas and validation.
 
 ## Security boundary
 
-CORS limits browser origins; it is not authentication. Dashboard roles, the login preview, and role switcher are client-side only. The API endpoints currently allow unauthenticated operations and are suitable for local demos, not public deployment. Production configuration refuses to start without a Flask secret, JWT secret, and database URL, but real JWT authorization still needs implementation.
+The frontend login preview and role switcher are client-side only. Basic JWT endpoints exist under `/api/auth`, but the frontend does not use them, operational endpoints accept unauthenticated requests, and no role or restaurant authorization is enforced. The API is suitable for local demos, not public deployment. Production configuration refuses to start without strong Flask and JWT secrets plus a PostgreSQL database URL.
 
 ## Planned work
 

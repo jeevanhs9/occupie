@@ -19,8 +19,8 @@ export function Badge({
     warning: 'bg-amber-50 text-amber-800 border border-amber-200/80',
     danger: 'bg-rose-50 text-rose-800 border border-rose-200/80',
     info: 'bg-sky-50 text-sky-800 border border-sky-200/80',
-    teal: 'bg-teal-50 text-teal-800 border border-teal-200/80',
-    navy: 'bg-occupie-navy-900 text-white border border-occupie-navy-700',
+    teal: 'bg-occupie-brass-300/30 text-occupie-walnut-950 border border-occupie-brass-500/40',
+    navy: 'bg-occupie-burgundy-900 text-white border border-occupie-burgundy-700',
   };
 
   const dotColors = {
@@ -30,7 +30,7 @@ export function Badge({
     danger: 'bg-rose-500',
     info: 'bg-sky-500',
     teal: 'bg-teal-500',
-    navy: 'bg-cyan-400',
+    navy: 'bg-occupie-brass-400',
   };
 
   return (

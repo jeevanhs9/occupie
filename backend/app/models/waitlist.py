@@ -11,6 +11,8 @@ class WaitlistEntry(db.Model):
     __tablename__ = 'waitlist_entries'
 
     id = db.Column(db.String(40), primary_key=True)
+    restaurant_id = db.Column(db.String(36), db.ForeignKey('restaurants.id'), nullable=False, default='default', index=True)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     party_name = db.Column(db.String(120), nullable=False)
     party_size = db.Column(db.Integer, nullable=False)
     contact = db.Column(db.String(40), nullable=True)

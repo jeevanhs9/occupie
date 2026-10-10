@@ -33,6 +33,7 @@ export function CustomerDashboard() {
     loading,
     error,
     refresh,
+    recommendReservation,
     createReservation,
     updateReservationStatus,
   } = useOperationalData();
@@ -43,6 +44,7 @@ export function CustomerDashboard() {
     return { partySize: '2', startsAt: toLocalDateTimeValue(startsAt), seatingPreference: '' };
   });
   const [bookingNotice, setBookingNotice] = useState(null);
+  const [suggestedTable, setSuggestedTable] = useState(null);
 
   const upcoming = reservations.filter((reservation) =>
     reservation.guestName === user?.name
@@ -56,18 +58,32 @@ export function CustomerDashboard() {
     const startsAt = new Date(bookingForm.startsAt);
     const partySize = Number(bookingForm.partySize);
     if (!Number.isInteger(partySize) || partySize < 1 || Number.isNaN(startsAt.getTime())) return;
-    const result = await createReservation({
+    const request = {
       guestName: user?.name || 'Dining Guest',
       partySize,
       startsAt: startsAt.toISOString(),
       seatingPreference: bookingForm.seatingPreference,
-    });
+    };
+    if (!suggestedTable) {
+      const recommendation = await recommendReservation(request);
+      if (!recommendation.success) {
+        setBookingNotice(`No table recommendation: ${recommendation.error}`);
+        return;
+      }
+      setSuggestedTable(recommendation.data.recommendation);
+      setBookingNotice(`Suggested ${recommendation.data.recommendation.name} in ${recommendation.data.recommendation.section}. Review the suggestion, then confirm.`);
+      return;
+    }
+
+    const result = await createReservation({ ...request, tableId: suggestedTable.id });
     if (!result.success) {
       setBookingNotice(`Reservation not placed: ${result.error}`);
+      if (result.status === 409) setSuggestedTable(null);
       return;
     }
     const reservation = result.data.reservation;
     setBookingNotice(`Reservation confirmed for ${reservation.time} at ${reservation.table}.`);
+    setSuggestedTable(null);
     setShowBookingForm(false);
   };
 
@@ -81,7 +97,7 @@ export function CustomerDashboard() {
   return (
     <div className="space-y-6 sm:space-y-8 max-w-5xl mx-auto">
       {/* Welcome Banner */}
-      <div className="rounded-3xl bg-gradient-to-br from-occupie-navy-950 via-slate-900 to-occupie-navy-900 text-white p-6 sm:p-8 relative overflow-hidden border border-occupie-navy-800 shadow-lg">
+      <div className="rounded-3xl bg-gradient-to-br from-occupie-burgundy-950 via-occupie-walnut-900 to-occupie-walnut-950 text-white p-6 sm:p-8 relative overflow-hidden border border-occupie-burgundy-800 shadow-lg">
         <div className="absolute right-0 top-0 w-96 h-96 bg-occupie-teal-500/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -116,7 +132,7 @@ export function CustomerDashboard() {
         <Card>
           <CardHeader>
             <CardTitle>Reserve a Table</CardTitle>
-            <CardDescription>Choose a future time and party size. Occupie assigns a suitable available table and protects existing reservation windows.</CardDescription>
+            <CardDescription>Choose a future time and party size. Occupie checks availability and suggests a table before confirming the reservation.</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleBookingSubmit} className="grid grid-cols-1 gap-4 sm:grid-cols-4 sm:items-end">
@@ -126,7 +142,10 @@ export function CustomerDashboard() {
                 min="1"
                 max="30"
                 value={bookingForm.partySize}
-                onChange={(event) => setBookingForm((form) => ({ ...form, partySize: event.target.value }))}
+                onChange={(event) => {
+                  setSuggestedTable(null);
+                  setBookingForm((form) => ({ ...form, partySize: event.target.value }));
+                }}
                 required
               />
               <Input
@@ -134,14 +153,20 @@ export function CustomerDashboard() {
                 type="datetime-local"
                 min={toLocalDateTimeValue(new Date())}
                 value={bookingForm.startsAt}
-                onChange={(event) => setBookingForm((form) => ({ ...form, startsAt: event.target.value }))}
+                onChange={(event) => {
+                  setSuggestedTable(null);
+                  setBookingForm((form) => ({ ...form, startsAt: event.target.value }));
+                }}
                 required
               />
               <label className="w-full space-y-1.5">
                 <span className="block text-xs font-semibold uppercase tracking-wide text-slate-700">Seating preference</span>
                 <select
                   value={bookingForm.seatingPreference}
-                  onChange={(event) => setBookingForm((form) => ({ ...form, seatingPreference: event.target.value }))}
+                  onChange={(event) => {
+                    setSuggestedTable(null);
+                    setBookingForm((form) => ({ ...form, seatingPreference: event.target.value }));
+                  }}
                   className="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 focus:border-occupie-cyan-500 focus:outline-none focus:ring-2 focus:ring-occupie-cyan-500/30"
                 >
                   <option value="">No preference</option>
@@ -151,8 +176,15 @@ export function CustomerDashboard() {
                   <option value="Private Alcove">Private Alcove</option>
                 </select>
               </label>
-              <Button type="submit" variant="accent" icon={PlusCircle}>Confirm Reservation</Button>
+              <Button type="submit" variant="accent" icon={suggestedTable ? CheckCircle2 : PlusCircle}>
+                {suggestedTable ? `Confirm ${suggestedTable.name}` : 'Find a Table'}
+              </Button>
             </form>
+            {suggestedTable && (
+              <div className="mt-4 rounded-xl border border-teal-200 bg-teal-50 p-4 text-sm text-teal-950" role="status">
+                Suggested table: <strong>{suggestedTable.name}</strong> · {suggestedTable.capacity} seats · {suggestedTable.section}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

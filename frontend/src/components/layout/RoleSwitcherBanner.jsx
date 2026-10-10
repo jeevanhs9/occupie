@@ -5,9 +5,13 @@ import { ROLES, ROLE_CONFIGS } from '../../lib/constants';
 import { Sparkles, ShieldAlert, ArrowRight } from 'lucide-react';
 
 export function RoleSwitcherBanner() {
-  const { currentRole, switchRole } = useRole();
+  const { currentRole, switchRole, isDemoMode } = useRole();
   const navigate = useNavigate();
   const location = useLocation();
+
+  if (!isDemoMode) {
+    return <div className="role-switcher bg-occupie-walnut-950 border-b border-occupie-brass-500/20 px-4 py-2 text-xs text-stone-300">Authenticated workspace · {ROLE_CONFIGS[currentRole]?.title}</div>;
+  }
 
   const handleRoleChange = (roleKey) => {
     switchRole(roleKey);
@@ -18,12 +22,12 @@ export function RoleSwitcherBanner() {
   };
 
   return (
-    <div className="bg-occupie-navy-950 border-b border-occupie-navy-800 text-slate-300 px-4 py-2.5 text-xs">
+    <div className="role-switcher bg-occupie-walnut-950 border-b border-occupie-brass-500/20 text-slate-300 px-4 py-2 text-xs">
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-2.5">
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 font-semibold border border-amber-500/30">
             <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
-            Phase 1 Demo Mode
+            Demo environment
           </span>
           <span className="text-slate-400 hidden sm:inline">
             Viewing dashboard as: <strong className="text-white font-medium">{ROLE_CONFIGS[currentRole]?.title}</strong>
@@ -41,10 +45,11 @@ export function RoleSwitcherBanner() {
                 onClick={() => handleRoleChange(config.id)}
                 className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
                   isActive
-                    ? 'bg-occupie-teal-500 text-occupie-navy-950 font-bold shadow-sm'
+                    ? 'bg-occupie-brass-500 text-occupie-walnut-950 font-bold shadow-sm'
                     : 'bg-occupie-navy-900 text-slate-300 hover:text-white hover:bg-occupie-navy-800 border border-occupie-navy-800'
                 }`}
                 title={config.description}
+                aria-pressed={isActive}
               >
                 {config.title.split(' ')[0]}
               </button>

@@ -98,8 +98,8 @@ Backend tests use an in-memory SQLite database and do not require PostgreSQL.
 
 ## Current limitations
 
-- Login and role switching are a demo shell. No authentication or backend role authorization exists.
+- Register, login, and token introspection exist under `/api/auth`, but the frontend login and role switching remain a demo shell. Operational endpoints do not require tokens and no backend role authorization exists.
 - API mode persists tables, reservations, waitlist entries, and seating state. It does not provide analytics, revenue metrics, notification delivery, or push updates.
 - Current records represent one demo restaurant; multi-tenant data isolation is not implemented.
 - The allocation rule is deterministic and documented in [API_CONTRACT.md](API_CONTRACT.md). It does not predict when occupied tables will clear and does not promise a wait time.
-- Do not deploy the current API where untrusted users can access it until authentication, role authorization, migrations, and production server configuration are complete.
+- Do not deploy the current API where untrusted users can access it until authentication is enforced on operations, role authorization, migrations, and production server configuration are complete.

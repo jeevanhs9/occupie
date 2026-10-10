@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, g, jsonify, request
+from flask_jwt_extended import get_current_user, verify_jwt_in_request
 from sqlalchemy.exc import IntegrityError
 
 from app.extensions import db
@@ -9,13 +10,59 @@ from app.models import (
     RestaurantTable,
     Reservation,
     WaitlistEntry,
+    Restaurant,
+    RestaurantMembership,
     TABLE_STATUSES,
     RESERVATION_STATUSES,
     WAITLIST_STATUSES,
 )
-from app.services.allocation import recommend_table
+from app.services.allocation import is_table_available, recommend_table
 
 operations_bp = Blueprint('operations', __name__)
+
+
+@operations_bp.before_request
+def require_role_and_restaurant():
+    if request.method == 'OPTIONS':
+        return None
+    verify_jwt_in_request()
+    user = get_current_user()
+    if not user:
+        return _error('Sign in to continue.', 401)
+
+    payload = request.get_json(silent=True) or {}
+    selected_restaurant = (
+        request.headers.get('X-Restaurant-ID')
+        or request.args.get('restaurant_id')
+        or payload.get('restaurantId')
+        or current_app.config.get('DEFAULT_RESTAURANT_ID', 'default')
+    )
+    if not isinstance(selected_restaurant, str) or not db.session.get(Restaurant, selected_restaurant):
+        return _error('Restaurant was not found.', 404)
+
+    membership = RestaurantMembership.query.filter_by(
+        user_id=user.id, restaurant_id=selected_restaurant
+    ).first()
+    role = membership.role if membership else 'customer'
+    path = request.path.removeprefix('/api/v1')
+    if path.startswith('/tables'):
+        allowed = {'manager', 'host', 'floor_staff', 'customer'} if request.method == 'GET' else (
+            {'manager'} if path == '/tables' else {'manager', 'host', 'floor_staff'}
+        )
+    elif path.startswith('/reservations'):
+        allowed = {'manager', 'host', 'floor_staff', 'customer'}
+    elif path.startswith('/waitlist'):
+        allowed = {'manager', 'host', 'floor_staff', 'customer'} if request.method == 'GET' else {'manager', 'host'}
+    elif path.startswith('/allocations'):
+        allowed = {'manager', 'host', 'floor_staff', 'customer'}
+    else:
+        allowed = set()
+    if role not in allowed:
+        return _error('You do not have permission to perform this operation.', 403)
+    g.occupie_user = user
+    g.occupie_role = role
+    g.restaurant_id = selected_restaurant
+    return None
 
 
 def _error(message, status=400, fields=None):
@@ -70,17 +117,25 @@ def _commit_or_conflict():
         return _error('A record with that identifier already exists.', 409)
 
 
-def _table_by_id(table_id):
-    return db.session.get(RestaurantTable, table_id)
+def _table_by_id(table_id, lock=False):
+    query = RestaurantTable.query.filter_by(id=table_id, restaurant_id=g.restaurant_id)
+    if lock:
+        query = query.with_for_update()
+    return query.first()
 
 
-def _recommendation(party_size, at=None, preferred_section=None):
+def _recommendation(party_size, at=None, preferred_section=None, lock_tables=False):
+    table_query = RestaurantTable.query.filter_by(restaurant_id=g.restaurant_id).order_by(RestaurantTable.id)
+    if lock_tables:
+        table_query = table_query.with_for_update()
+    tables = table_query.all()
     reservations = Reservation.query.filter(
+        Reservation.restaurant_id == g.restaurant_id,
         Reservation.status.in_(('confirmed', 'checked_in')),
         Reservation.table_id.isnot(None),
     ).all()
     return recommend_table(
-        RestaurantTable.query.all(),
+        tables,
         party_size,
         reservations=reservations,
         at=at or datetime.now(timezone.utc),
@@ -88,26 +143,32 @@ def _recommendation(party_size, at=None, preferred_section=None):
     )
 
 
-def _is_table_available_for_party(table, party_size, at=None):
+def _is_table_available_for_party(table, party_size, at=None, exclude_reservation_id=None):
     if table is None:
         return False
     reservations = Reservation.query.filter(
+        Reservation.restaurant_id == g.restaurant_id,
         Reservation.status.in_(('confirmed', 'checked_in')),
         Reservation.table_id == table.id,
     ).all()
-    return recommend_table(
-        [table],
+    return is_table_available(
+        table,
         party_size,
         reservations=reservations,
         at=at or datetime.now(timezone.utc),
-    ) is not None
+        exclude_reservation_id=exclude_reservation_id,
+    )
 
 
 @operations_bp.route('/tables', methods=['GET', 'POST'])
 def tables_collection():
     if request.method == 'GET':
-        tables = RestaurantTable.query.order_by(RestaurantTable.id).all()
-        return jsonify({'tables': [table.to_dict() for table in tables]}), 200
+        tables = RestaurantTable.query.filter_by(restaurant_id=g.restaurant_id).order_by(RestaurantTable.id).all()
+        if g.occupie_role == 'customer':
+            rows = [{key: table.to_dict()[key] for key in ('id', 'name', 'capacity', 'section', 'status')} for table in tables]
+        else:
+            rows = [table.to_dict() for table in tables]
+        return jsonify({'tables': rows}), 200
 
     payload, error = _payload()
     if error:
@@ -145,6 +206,7 @@ def tables_collection():
         name=name.strip(),
         capacity=capacity,
         section=section.strip(),
+        restaurant_id=g.restaurant_id,
         status=status,
         assigned_server=assigned_server.strip() if assigned_server else None,
     )
@@ -160,7 +222,7 @@ def update_table_status(table_id):
     payload, error = _payload()
     if error:
         return error
-    table = _table_by_id(table_id)
+    table = _table_by_id(table_id, lock=True)
     if table is None:
         return _error('Table was not found.', 404)
 
@@ -190,13 +252,16 @@ def update_table_status(table_id):
 @operations_bp.route('/reservations', methods=['GET', 'POST'])
 def reservations_collection():
     if request.method == 'GET':
-        reservations = Reservation.query.order_by(Reservation.starts_at, Reservation.id).all()
+        query = Reservation.query.filter_by(restaurant_id=g.restaurant_id)
+        if g.occupie_role == 'customer':
+            query = query.filter_by(customer_id=g.occupie_user.id)
+        reservations = query.order_by(Reservation.starts_at, Reservation.id).all()
         return jsonify({'reservations': [reservation.to_dict() for reservation in reservations]}), 200
 
     payload, error = _payload()
     if error:
         return error
-    guest_name = payload.get('guestName')
+    guest_name = g.occupie_user.name if g.occupie_role == 'customer' else payload.get('guestName')
     party_size = payload.get('partySize')
     if not isinstance(guest_name, str) or not guest_name.strip():
         return _error('guestName is required.', 422, {'guestName': 'Required.'})
@@ -220,12 +285,24 @@ def reservations_collection():
         return _error('phone must be a string of 40 characters or fewer.', 422, {'phone': 'Invalid value.'})
     if notes is not None and (not isinstance(notes, str) or len(notes) > 500):
         return _error('notes must be a string of 500 characters or fewer.', 422, {'notes': 'Invalid value.'})
-    table = _recommendation(party_size, starts_at, preferred_section)
+    requested_table_id = payload.get('tableId')
+    if requested_table_id is not None and not isinstance(requested_table_id, str):
+        return _error('tableId must be a table identifier string.', 422, {'tableId': 'Invalid table.'})
+    if requested_table_id:
+        table = _table_by_id(requested_table_id, lock=True)
+        if table is None:
+            return _error('Suggested table was not found.', 404)
+        if table.status != 'available' or not _is_table_available_for_party(table, party_size, starts_at):
+            return _error('The suggested table is no longer available for that time. Request a new recommendation.', 409)
+    else:
+        table = _recommendation(party_size, starts_at, preferred_section, lock_tables=True)
     if table is None:
         return _error('No suitable table is available for that party and time.', 409)
 
     reservation = Reservation(
         id=f"RES-{uuid4().hex[:8].upper()}",
+        restaurant_id=g.restaurant_id,
+        customer_id=g.occupie_user.id if g.occupie_role == 'customer' else None,
         guest_name=guest_name.strip(),
         party_size=party_size,
         starts_at=starts_at,
@@ -247,7 +324,7 @@ def update_reservation_status(reservation_id):
     payload, error = _payload()
     if error:
         return error
-    reservation = db.session.get(Reservation, reservation_id)
+    reservation = Reservation.query.filter_by(id=reservation_id, restaurant_id=g.restaurant_id).first()
     if reservation is None:
         return _error('Reservation was not found.', 404)
     status = payload.get('status')
@@ -262,12 +339,21 @@ def update_reservation_status(reservation_id):
     }
     if status != reservation.status and status not in allowed_transitions[reservation.status]:
         return _error(f'A reservation cannot move from {reservation.status} to {status}.', 409)
+    if g.occupie_role == 'customer' and (
+        reservation.customer_id != g.occupie_user.id or status not in {'cancelled', 'checked_in'}
+    ):
+        return _error('Customers may only check in to or cancel their own reservation.', 403)
     if status == reservation.status:
         return jsonify({'reservation': reservation.to_dict()}), 200
     if status == 'seated':
-        table = _table_by_id(reservation.table_id) if reservation.table_id else None
-        if table is None or table.status not in ('available', 'reserved'):
-            return _error('The reservation table is not available for seating.', 409)
+        table = _table_by_id(reservation.table_id, lock=True) if reservation.table_id else None
+        if table is None or not _is_table_available_for_party(
+            table,
+            reservation.party_size,
+            at=datetime.now(timezone.utc),
+            exclude_reservation_id=reservation.id,
+        ):
+            return _error('The reservation table is not available for seating because it is occupied, too small, or protected for another reservation.', 409)
         table.status = 'occupied'
         table.party_size = reservation.party_size
         table.time_seated = datetime.now(timezone.utc)
@@ -279,7 +365,10 @@ def update_reservation_status(reservation_id):
 @operations_bp.route('/waitlist', methods=['GET', 'POST'])
 def waitlist_collection():
     if request.method == 'GET':
+        if g.occupie_role == 'customer':
+            return jsonify({'waitlist': []}), 200
         entries = WaitlistEntry.query.filter(
+            WaitlistEntry.restaurant_id == g.restaurant_id,
             WaitlistEntry.status.in_(('waiting', 'ready')),
         ).order_by(WaitlistEntry.created_at, WaitlistEntry.id).all()
         return jsonify({'waitlist': [entry.to_dict() for entry in entries]}), 200
@@ -301,6 +390,8 @@ def waitlist_collection():
 
     entry = WaitlistEntry(
         id=f"WL-{uuid4().hex[:8].upper()}",
+        restaurant_id=g.restaurant_id,
+        created_by_id=g.occupie_user.id,
         party_name=party_name.strip(),
         party_size=party_size,
         contact=contact.strip() if contact and contact.strip() else None,
@@ -315,7 +406,7 @@ def update_waitlist_entry(entry_id):
     payload, error = _payload()
     if error:
         return error
-    entry = db.session.get(WaitlistEntry, entry_id)
+    entry = WaitlistEntry.query.filter_by(id=entry_id, restaurant_id=g.restaurant_id).first()
     if entry is None:
         return _error('Waitlist entry was not found.', 404)
     status = payload.get('status')
@@ -328,13 +419,14 @@ def update_waitlist_entry(entry_id):
 
 @operations_bp.route('/waitlist/<string:entry_id>/seat', methods=['POST'])
 def seat_waitlist_entry(entry_id):
-    entry = db.session.get(WaitlistEntry, entry_id)
+    entry = WaitlistEntry.query.filter_by(id=entry_id, restaurant_id=g.restaurant_id).first()
     if entry is None:
         return _error('Waitlist entry was not found.', 404)
     if entry.status not in ('waiting', 'ready'):
         return _error('Only a waiting or ready party can be seated.', 409)
 
     ordered_entries = WaitlistEntry.query.filter(
+        WaitlistEntry.restaurant_id == g.restaurant_id,
         WaitlistEntry.status.in_(('waiting', 'ready')),
     ).order_by(WaitlistEntry.created_at, WaitlistEntry.id).all()
     next_seatable = next((candidate for candidate in ordered_entries if _recommendation(candidate.party_size)), None)
@@ -346,7 +438,7 @@ def seat_waitlist_entry(entry_id):
         return error
     requested_table_id = payload.get('tableId')
     if requested_table_id:
-        table = _table_by_id(requested_table_id)
+        table = _table_by_id(requested_table_id, lock=True)
         if table is None:
             return _error('Table was not found.', 404)
         if table.status != 'available' or table.capacity < entry.party_size:
@@ -354,7 +446,7 @@ def seat_waitlist_entry(entry_id):
         if not _is_table_available_for_party(table, entry.party_size):
             return _error('Selected table is being held for an upcoming reservation.', 409)
     else:
-        table = _recommendation(entry.party_size)
+        table = _recommendation(entry.party_size, lock_tables=True)
         if table is None:
             return _error('No suitable table is available for this party.', 409)
 

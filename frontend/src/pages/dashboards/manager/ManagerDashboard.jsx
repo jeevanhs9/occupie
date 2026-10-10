@@ -6,9 +6,10 @@ import { Button } from '../../../components/ui/Button';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { Input } from '../../../components/ui/Input';
 import { OperationalDataStatus } from '../../../components/common/OperationalDataStatus';
+import { FloorPlan } from '../../../components/dashboard/FloorPlan';
 import { useOperationalData } from '../../../hooks/useOperationalData';
-import { TABLE_STATUS_CONFIG } from '../../../lib/constants';
 import { MOCK_RESTAURANT_INFO } from '../../../services/mockData';
+import { nextSeatableWaitlistEntry } from '../../../services/allocation';
 import {
   Users,
   Activity,
@@ -42,6 +43,7 @@ export function ManagerDashboard() {
   const activeCovers = tables.filter((table) => table.status === 'occupied').reduce((sum, table) => sum + (table.partySize || 0), 0);
   const occupancyRate = totalCapacity ? Math.round((activeCovers / totalCapacity) * 100) : 0;
   const activeReservations = reservations.filter((res) => !['cancelled', 'no_show'].includes(res.status));
+  const seatingRecommendation = nextSeatableWaitlistEntry({ waitlist, tables, reservations });
 
   const exportShiftReport = () => {
     const rows = [
@@ -208,11 +210,62 @@ export function ManagerDashboard() {
             />
           </div>
 
+          <div className="manager-service-overview">
+            <section className="manager-queue-panel" aria-labelledby="manager-queue-title">
+              <div className="manager-panel-heading">
+                <div>
+                  <p className="manager-panel-kicker">Front of house</p>
+                  <h3 id="manager-queue-title">Waiting list</h3>
+                </div>
+                <span className="manager-panel-count">{waitlist.length} {waitlist.length === 1 ? 'party' : 'parties'}</span>
+              </div>
+              {waitlist.length ? (
+                <ul className="manager-queue-list">
+                  {waitlist.slice(0, 4).map((entry, index) => (
+                    <li key={entry.id}>
+                      <span className="manager-queue-position">{String(index + 1).padStart(2, '0')}</span>
+                      <span className="manager-queue-name">{entry.partyName}<small>{entry.partySize} guests</small></span>
+                      {entry.status === 'ready' && <span className="manager-queue-ready">Ready</span>}
+                      <span className="manager-queue-wait">{entry.waitMinutes ?? '—'} min</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="manager-panel-empty">The waitlist is clear.</p>
+              )}
+              {demoMode && <p className="manager-panel-note">Preview queue data</p>}
+            </section>
+
+            <section className="manager-recommendation-panel" aria-labelledby="manager-recommendation-title">
+              <div className="manager-panel-heading">
+                <div>
+                  <p className="manager-panel-kicker">Allocation rules</p>
+                  <h3 id="manager-recommendation-title">Next suitable seating</h3>
+                </div>
+                <span className="recommendation-mark" aria-hidden="true">✦</span>
+              </div>
+              {seatingRecommendation.entry && seatingRecommendation.table ? (
+                <>
+                  <p className="recommendation-party">{seatingRecommendation.entry.partyName}</p>
+                  <p className="recommendation-match">
+                    <strong>{seatingRecommendation.table.name}</strong>
+                    <span>{seatingRecommendation.table.section} · {seatingRecommendation.table.capacity} seats</span>
+                  </p>
+                  <p className="recommendation-reason">{seatingRecommendation.reason}</p>
+                </>
+              ) : (
+                <p className="manager-panel-empty">{seatingRecommendation.reason}</p>
+              )}
+              <p className="manager-panel-note">{demoMode ? 'Preview recommendation · no table was assigned' : 'Suggestion only · no table was assigned'}</p>
+            </section>
+          </div>
+
           {/* Table Occupancy Visualization */}
           <Card id="tables" className="scroll-mt-24">
             <CardHeader
+              className="manager-floor-header"
               action={
-                <div className="flex items-center gap-1.5 flex-wrap">
+                <div className="manager-floor-filters flex items-center gap-1.5 flex-wrap">
                   {['all', 'available', 'occupied', 'cleaning', 'reserved'].map((status) => (
                     <button
                       key={status}
@@ -231,48 +284,13 @@ export function ManagerDashboard() {
                 </div>
               }
             >
-              <CardTitle>Floor Plan & Table Status Grid</CardTitle>
+              <CardTitle>Restaurant Floor Plan</CardTitle>
               <CardDescription>
                 {demoMode ? 'Preview of table status by dining section.' : 'Current table status from the configured restaurant API.'}
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {filteredTables.length ? <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-8 gap-3">
-                {filteredTables.map((table) => {
-                  const statusMeta = TABLE_STATUS_CONFIG[table.status] || TABLE_STATUS_CONFIG.available;
-                  return (
-                    <div
-                      key={table.id}
-                      className="p-3.5 rounded-xl border border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm transition-all flex flex-col justify-between min-h-[110px]"
-                    >
-                      <div className="flex items-start justify-between">
-                        <span className="font-bold text-slate-900 text-sm">{table.name}</span>
-                        <span className="text-[11px] font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
-                          {table.capacity}p
-                        </span>
-                      </div>
-
-                      <div className="space-y-1 my-2">
-                        <div className="text-[11px] text-slate-500 truncate" title={table.section}>
-                          {table.section}
-                        </div>
-                        {table.timeSeated && (
-                          <div className="text-[10px] text-slate-400">
-                            Seated {table.timeSeated}
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="pt-1 border-t border-slate-100 flex items-center justify-between">
-                        <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${statusMeta.badgeClass}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${statusMeta.dotClass}`} />
-                          {statusMeta.label}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div> : <EmptyState
+              {filteredTables.length ? <FloorPlan tables={filteredTables} /> : <EmptyState
                 title={tables.length ? 'No tables match this filter' : 'No tables have been added'}
                 description={tables.length ? 'Choose another status filter to see tables.' : 'Add the restaurant tables to start managing service.'}
                 actionLabel={!tables.length ? 'Add a table' : undefined}

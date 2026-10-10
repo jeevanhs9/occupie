@@ -12,15 +12,15 @@ export function StatCard({
   className = '',
 }) {
   const accentBgs = {
-    teal: 'bg-teal-50 text-teal-700 border-teal-200/60',
-    cyan: 'bg-sky-50 text-sky-700 border-sky-200/60',
+    teal: 'bg-occupie-brass-300/30 text-occupie-burgundy-700 border-occupie-brass-500/40',
+    cyan: 'bg-occupie-burgundy-50 text-occupie-burgundy-700 border-occupie-burgundy-200/60',
     amber: 'bg-amber-50 text-amber-700 border-amber-200/60',
-    indigo: 'bg-indigo-50 text-indigo-700 border-indigo-200/60',
-    navy: 'bg-occupie-navy-900 text-cyan-400 border-occupie-navy-700',
+    indigo: 'bg-occupie-burgundy-50 text-occupie-burgundy-700 border-occupie-burgundy-200/60',
+    navy: 'bg-occupie-walnut-900 text-occupie-brass-300 border-occupie-walnut-700',
   };
 
   return (
-    <div className={`p-5 sm:p-6 rounded-2xl bg-white border border-slate-200/80 shadow-sm hover:shadow-card hover:border-slate-300 transition-all duration-200 ${className}`}>
+    <div className={`p-5 sm:p-6 rounded-xl bg-occupie-cream border border-stone-200 shadow-card hover:shadow-card-hover hover:border-occupie-brass-400/70 transition-all duration-200 ${className}`}>
       <div className="flex items-start justify-between">
         <div className="space-y-1">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{title}</p>
