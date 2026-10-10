@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  body {
+    @apply antialiased text-slate-800 bg-slate-50 selection:bg-teal-500/20 selection:text-teal-900;
+  }
+}
+
+@layer utilities {
+  /* Subtle glass card style */
+  .glass-card-dark {
+    background: rgba(15, 24, 50, 0.75);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .glass-card-light {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(226, 232, 240, 0.8);
+  }
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

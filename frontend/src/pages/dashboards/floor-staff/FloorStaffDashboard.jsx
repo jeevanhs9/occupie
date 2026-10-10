@@ -1,0 +1,250 @@
+import React, { useState } from 'react';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../../components/ui/Card';
+import { StatCard } from '../../../components/ui/StatCard';
+import { Badge } from '../../../components/ui/Badge';
+import { Button } from '../../../components/ui/Button';
+import { OperationalDataStatus } from '../../../components/common/OperationalDataStatus';
+import { useOperationalData } from '../../../hooks/useOperationalData';
+import { TABLE_STATUS, TABLE_STATUS_CONFIG } from '../../../lib/constants';
+import {
+  Sparkles,
+  Armchair,
+  CheckCircle2,
+  Coffee,
+  RotateCw,
+  Clock,
+  UserCheck,
+  AlertCircle,
+} from 'lucide-react';
+
+export function FloorStaffDashboard() {
+  const { tables, loading, error, refresh, updateTableStatus } = useOperationalData();
+  const [filterMode, setFilterMode] = useState('assigned'); // 'assigned' | 'all'
+  const [lastAction, setLastAction] = useState(null);
+  const [partySizes, setPartySizes] = useState({});
+
+  // Station A assigned to current staff member Marco R.
+  const assignedServer = 'Marco R.';
+
+  const handleUpdateStatus = async (tableId, nextStatus, partySize) => {
+    const result = await updateTableStatus(tableId, nextStatus, partySize);
+    setLastAction(result.success
+      ? `Updated ${tableId} to "${TABLE_STATUS_CONFIG[nextStatus].label}".`
+      : `Could not update ${tableId}: ${result.error}`);
+  };
+
+  const displayedTables = filterMode === 'assigned'
+    ? tables.filter((t) => t.assignedServer === assignedServer)
+    : tables;
+
+  const occupiedCount = displayedTables.filter((t) => t.status === 'occupied').length;
+  const cleaningCount = displayedTables.filter((t) => t.status === 'cleaning').length;
+  const availableCount = displayedTables.filter((t) => t.status === 'available').length;
+
+  return (
+    <div className="space-y-6 sm:space-y-8">
+      {/* Top Section */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+              Floor Staff & Table Turnover
+            </h2>
+            <Badge variant="warning" size="sm">Station A &bull; Marco R.</Badge>
+          </div>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+            Tap table controls below to quickly update dining, clearing, and ready status.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <div className="bg-white p-1 rounded-xl border border-slate-200 flex items-center gap-1 shadow-xs">
+            <button
+              onClick={() => setFilterMode('assigned')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                filterMode === 'assigned'
+                  ? 'bg-occupie-navy-900 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              My Station ({tables.filter(t => t.assignedServer === assignedServer).length})
+            </button>
+            <button
+              onClick={() => setFilterMode('all')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                filterMode === 'all'
+                  ? 'bg-occupie-navy-900 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              All Tables ({tables.length})
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <OperationalDataStatus loading={loading} error={error} onRetry={refresh} />
+
+      {lastAction && (
+        <div className="p-3 rounded-xl bg-slate-900 text-white text-xs font-medium flex items-center justify-between shadow-md">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-occupie-teal-400" />
+            <span>{lastAction}</span>
+          </div>
+          <span className="text-[10px] text-slate-400">Mock Data Preview</span>
+        </div>
+      )}
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <StatCard
+          title="Active Dining Tables"
+          value={occupiedCount}
+          subtitle="Currently seated with guests"
+          icon={Coffee}
+          accentColor="cyan"
+        />
+        <StatCard
+          title="Turnover / Cleaning Required"
+          value={cleaningCount}
+          subtitle="Priority turnaround targets"
+          icon={Sparkles}
+          accentColor="amber"
+        />
+        <StatCard
+          title="Ready For Guests"
+          value={availableCount}
+          subtitle="Sanitized and set"
+          icon={Armchair}
+          accentColor="teal"
+        />
+      </div>
+
+      {/* Table Cards Grid with Fast Status Action Buttons */}
+      <Card id="tables" className="scroll-mt-24">
+        <CardHeader
+          action={
+            <span className="text-xs text-slate-500 font-medium">
+              Click status pills to cycle table states
+            </span>
+          }
+        >
+          <CardTitle>
+            {filterMode === 'assigned' ? 'Station A — Assigned Tables' : 'Full Restaurant Floor Overview'}
+          </CardTitle>
+          <CardDescription>
+            Instant touch-optimized buttons designed for handheld staff tablets.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {displayedTables.map((table) => {
+              const statusMeta = TABLE_STATUS_CONFIG[table.status] || TABLE_STATUS_CONFIG.available;
+
+              return (
+                <div
+                  key={table.id}
+                  className="p-5 rounded-2xl border border-slate-200/90 bg-white hover:border-slate-300 shadow-xs hover:shadow-card transition-all flex flex-col justify-between"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-base font-bold text-slate-900">{table.name}</span>
+                        <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                          {table.capacity} seats
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5">{table.section}</p>
+                    </div>
+
+                    <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full border ${statusMeta.badgeClass}`}>
+                      <span className={`w-2 h-2 rounded-full ${statusMeta.dotClass}`} />
+                      {statusMeta.label}
+                    </span>
+                  </div>
+
+                  <div className="py-4 my-2 border-y border-slate-100 flex items-center justify-between text-xs text-slate-600">
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-bold">Assigned Server</span>
+                      <span className="font-semibold text-slate-800">{table.assignedServer}</span>
+                    </div>
+                    {table.status === 'occupied' && (
+                      <div className="text-right">
+                        <span className="text-slate-400 block text-[10px] uppercase font-bold">Party Size</span>
+                        <span className="font-semibold text-slate-800">{table.partySize} guests ({table.timeSeated})</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Status Toggle Action Buttons */}
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                      Update State:
+                    </span>
+                    {table.status === TABLE_STATUS.AVAILABLE && (
+                      <label className="mb-2 flex items-center gap-2 text-[11px] font-medium text-slate-600">
+                        Party size
+                        <input
+                          aria-label={`Party size for ${table.name}`}
+                          type="number"
+                          min="1"
+                          max={table.capacity}
+                          value={partySizes[table.id] || Math.min(2, table.capacity)}
+                          onChange={(event) => setPartySizes((current) => ({ ...current, [table.id]: event.target.value }))}
+                          className="w-16 rounded-lg border border-slate-300 px-2 py-1 text-xs focus:border-occupie-cyan-500 focus:outline-none focus:ring-2 focus:ring-occupie-cyan-500/30"
+                        />
+                        <span>of {table.capacity} seats</span>
+                      </label>
+                    )}
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateStatus(table.id, TABLE_STATUS.AVAILABLE)}
+                        disabled={table.status === TABLE_STATUS.AVAILABLE}
+                        className={`text-[11px] font-bold py-1.5 px-2 rounded-lg border transition-all ${
+                          table.status === TABLE_STATUS.AVAILABLE
+                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                            : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+                        }`}
+                      >
+                        Available
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateStatus(table.id, TABLE_STATUS.OCCUPIED, Number(partySizes[table.id] || Math.min(2, table.capacity)))}
+                        disabled={table.status !== TABLE_STATUS.AVAILABLE}
+                        className={`text-[11px] font-bold py-1.5 px-2 rounded-lg border transition-all ${
+                          table.status === TABLE_STATUS.OCCUPIED
+                            ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                            : 'bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100'
+                        }`}
+                      >
+                        Occupied
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateStatus(table.id, TABLE_STATUS.CLEANING)}
+                        disabled={table.status === TABLE_STATUS.CLEANING}
+                        className={`text-[11px] font-bold py-1.5 px-2 rounded-lg border transition-all ${
+                          table.status === TABLE_STATUS.CLEANING
+                            ? 'bg-sky-600 text-white border-sky-600 shadow-xs'
+                            : 'bg-sky-50 text-sky-800 border-sky-200 hover:bg-sky-100'
+                        }`}
+                      >
+                        Cleaning
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+export default FloorStaffDashboard;
