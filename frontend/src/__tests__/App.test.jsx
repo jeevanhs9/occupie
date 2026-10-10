@@ -9,7 +9,7 @@ import LoginPage from '../pages/auth/LoginPage';
 import ManagerDashboard from '../pages/dashboards/manager/ManagerDashboard';
 
 describe('Occupie Frontend Phase 1 Foundation', () => {
-  it('renders the cinematic landing page introduction', () => {
+  it('renders the restaurant-led landing page introduction', () => {
     render(
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }} initialEntries={['/']}>
         <RoleProvider>
@@ -18,9 +18,8 @@ describe('Occupie Frontend Phase 1 Foundation', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText(/A considered room/i)).toBeInTheDocument();
-    expect(screen.getByText(/begins at the door/i)).toBeInTheDocument();
-    expect(screen.getByText('Enter the experience')).toBeInTheDocument();
+    expect(screen.getByText(/An exceptional welcome begins before the first course/i)).toBeInTheDocument();
+    expect(screen.getAllByText('Enter the workspace')).toHaveLength(2);
   });
 
   it('renders role selector with 4 core user roles', () => {
