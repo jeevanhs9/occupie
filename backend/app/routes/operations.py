@@ -6,6 +6,7 @@ from flask_jwt_extended import get_current_user, verify_jwt_in_request
 from sqlalchemy.exc import IntegrityError
 
 from app.extensions import db
+from app.middleware.auth import roles_required
 from app.models import (
     RestaurantTable,
     Reservation,
@@ -507,6 +508,7 @@ def update_waitlist_entry(entry_id):
 
 
 @operations_bp.route('/waitlist/<string:entry_id>/seat', methods=['POST'])
+@roles_required('manager', 'host')
 def seat_waitlist_entry(entry_id):
     entry = WaitlistEntry.query.filter_by(id=entry_id, restaurant_id=g.restaurant_id).first()
     if entry is None:

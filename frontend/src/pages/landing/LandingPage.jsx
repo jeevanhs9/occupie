@@ -1,10 +1,105 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { AnimatePresence, motion, useInView, useReducedMotion } from 'framer-motion';
 import { ArrowUpRight, Menu, X } from 'lucide-react';
 import { Logo } from '../../components/common/Logo';
 import { CinematicScene } from './CinematicScene';
 import { ProductStory } from './ProductStory';
+
+// Cinematic animation variants for final CTA
+const cinematicEase = [0.22, 1, 0.36, 1];
+
+const eyebrowVariants = {
+  hidden: { 
+    opacity: 0,
+    letterSpacing: '0.3em'
+  },
+  visible: {
+    opacity: 1,
+    letterSpacing: '0.18em',
+    transition: {
+      duration: 1.0,
+      ease: cinematicEase
+    }
+  }
+};
+
+const headlinePartVariants = {
+  hidden: {
+    opacity: 0,
+    y: 50,
+    clipPath: 'inset(0 0 100% 0)'
+  },
+  visible: (custom) => ({
+    opacity: 1,
+    y: 0,
+    clipPath: 'inset(0 0 0% 0)',
+    transition: {
+      duration: 1.3,
+      delay: 0.3 + custom * 0.25,
+      ease: cinematicEase
+    }
+  })
+};
+
+const supportTextVariants = {
+  hidden: { opacity: 0, y: 30 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      duration: 0.9,
+      delay: 1.1,
+      ease: cinematicEase
+    }
+  }
+};
+
+const ctaButtonVariants = {
+  hidden: { 
+    opacity: 0, 
+    y: 30,
+    scale: 0.96
+  },
+  visible: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: {
+      duration: 0.8,
+      delay: 1.4,
+      ease: cinematicEase
+    }
+  }
+};
+
+const footerVariants = {
+  hidden: { 
+    opacity: 0, 
+    y: 40
+  },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      duration: 1.0,
+      ease: cinematicEase
+    }
+  }
+};
+
+const footerChildVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: (custom) => ({
+    opacity: 1,
+    y: 0,
+    transition: {
+      duration: 0.7,
+      delay: 0.2 + custom * 0.15,
+      ease: cinematicEase
+    }
+  })
+};
 
 function LuxuryNavigation({ menuOpen, setMenuOpen, scrolled, reduceMotion }) {
   const goTo = (target) => {
@@ -43,6 +138,31 @@ export function LandingPage() {
   const reduceMotion = useReducedMotion();
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  
+  // Refs for animation triggers
+  const closingCtaRef = useRef(null);
+  const footerRef = useRef(null);
+  
+  // Use framer-motion's useInView for scroll-triggered animations
+  const isClosingCtaInView = useInView(closingCtaRef, {
+    once: true,
+    amount: 0.25,
+    margin: '0px 0px -150px 0px'
+  });
+  
+  const isFooterInView = useInView(footerRef, {
+    once: true,
+    amount: 0.4,
+    margin: '0px 0px -80px 0px'
+  });
+  
+  // Add visible class to footer for border animation
+  useEffect(() => {
+    if (isFooterInView && footerRef.current) {
+      footerRef.current.classList.add('footer-visible');
+    }
+  }, [isFooterInView]);
+  
   useEffect(() => {
     const updateNav = () => setScrolled(window.scrollY > 36);
     updateNav();
@@ -56,18 +176,88 @@ export function LandingPage() {
       <main>
         <CinematicScene />
         <ProductStory />
-        <section className="closing-cta">
-          <p className="eyebrow">Make room for remarkable service</p>
-          <h2>Let every guest feel expected.</h2>
-          <p>Explore the Occupie role demo and see how the dining room stays in step.</p>
-          <Link to="/auth/login" className="gold-action">Enter the workspace <ArrowUpRight size={16} /></Link>
+        <section ref={closingCtaRef} className="closing-cta">
+          <motion.p 
+            className="eyebrow"
+            initial={reduceMotion ? false : "hidden"}
+            animate={isClosingCtaInView ? "visible" : "hidden"}
+            variants={eyebrowVariants}
+          >
+            Make room for remarkable service
+          </motion.p>
+          
+          <h2>
+            <motion.span
+              style={{ display: 'block' }}
+              custom={0}
+              initial={reduceMotion ? false : "hidden"}
+              animate={isClosingCtaInView ? "visible" : "hidden"}
+              variants={headlinePartVariants}
+            >
+              Let every guest feel
+            </motion.span>
+            <motion.span
+              style={{ display: 'block' }}
+              custom={1}
+              initial={reduceMotion ? false : "hidden"}
+              animate={isClosingCtaInView ? "visible" : "hidden"}
+              variants={headlinePartVariants}
+            >
+              expected.
+            </motion.span>
+          </h2>
+          
+          <motion.p
+            initial={reduceMotion ? false : "hidden"}
+            animate={isClosingCtaInView ? "visible" : "hidden"}
+            variants={supportTextVariants}
+          >
+            Explore the Occupie role demo and see how the dining room stays in step.
+          </motion.p>
+          
+          <motion.div
+            initial={reduceMotion ? false : "hidden"}
+            animate={isClosingCtaInView ? "visible" : "hidden"}
+            variants={ctaButtonVariants}
+          >
+            <Link to="/auth/login" className="gold-action cinematic-cta-button">
+              Enter the workspace <ArrowUpRight size={16} />
+            </Link>
+          </motion.div>
         </section>
       </main>
-      <footer className="luxury-footer">
-        <Logo size="sm" theme="light" />
-        <p>Intelligent seating for considered hospitality.</p>
-        <p>© {new Date().getFullYear()} Occupie</p>
-      </footer>
+      <motion.footer 
+        ref={footerRef}
+        className="luxury-footer"
+        initial={reduceMotion ? false : "hidden"}
+        animate={isFooterInView ? "visible" : "hidden"}
+        variants={footerVariants}
+      >
+        <motion.div
+          custom={0}
+          initial={reduceMotion ? false : "hidden"}
+          animate={isFooterInView ? "visible" : "hidden"}
+          variants={footerChildVariants}
+        >
+          <Logo size="sm" theme="light" />
+        </motion.div>
+        <motion.p
+          custom={1}
+          initial={reduceMotion ? false : "hidden"}
+          animate={isFooterInView ? "visible" : "hidden"}
+          variants={footerChildVariants}
+        >
+          Intelligent seating for considered hospitality.
+        </motion.p>
+        <motion.p
+          custom={2}
+          initial={reduceMotion ? false : "hidden"}
+          animate={isFooterInView ? "visible" : "hidden"}
+          variants={footerChildVariants}
+        >
+          © {new Date().getFullYear()} Occupie
+        </motion.p>
+      </motion.footer>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import pytest
 
 from app import create_app
+from app.config import Config
 
 
 def test_production_app_requires_secrets_and_database_url(monkeypatch):
@@ -9,6 +10,15 @@ def test_production_app_requires_secrets_and_database_url(monkeypatch):
 
     with pytest.raises(RuntimeError, match='Production configuration requires'):
         create_app('production')
+
+
+def test_default_factory_rejects_implicit_random_secrets_in_production(monkeypatch):
+    monkeypatch.setattr(Config, 'APP_ENV', 'production')
+    for key in ('SECRET_KEY', 'JWT_SECRET_KEY', 'DATABASE_URL'):
+        monkeypatch.delenv(key, raising=False)
+
+    with pytest.raises(RuntimeError, match='explicit environment variables'):
+        create_app()
 
 
 def test_production_app_rejects_example_secrets(monkeypatch):

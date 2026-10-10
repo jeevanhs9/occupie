@@ -1,34 +1,34 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 80" fill="none">
-  <!-- Occupie Mark (Left) -->
+  <!-- Occupie Mark (Left) - Navy Blue and Teal for Dark Backgrounds -->
   <g transform="translate(40, 40) scale(0.32)">
     <!-- Center table dot -->
-    <circle cx="0" cy="0" r="14" fill="#F3EEE5" />
+    <circle cx="0" cy="0" r="14" fill="#2A3F5F" />
 
     <!-- Top-Left -->
-    <circle cx="-46" cy="-46" r="18" fill="#F3EEE5" />
-    <path d="M -9 -36 L -9 -14 A 5 5 0 0 1 -14 -9 L -36 -9 A 10 10 0 0 0 -46 -19 L -46 -24 A 22 22 0 0 1 -24 -46 L -19 -46 A 10 10 0 0 0 -9 -36 Z" fill="#F3EEE5" />
+    <circle cx="-46" cy="-46" r="18" fill="#3D5A7A" />
+    <path d="M -9 -36 L -9 -14 A 5 5 0 0 1 -14 -9 L -36 -9 A 10 10 0 0 0 -46 -19 L -46 -24 A 22 22 0 0 1 -24 -46 L -19 -46 A 10 10 0 0 0 -9 -36 Z" fill="#2A3F5F" />
 
     <!-- Top-Right -->
     <g transform="rotate(90)">
-      <circle cx="-46" cy="-46" r="18" fill="#F3EEE5" />
-      <path d="M -9 -36 L -9 -14 A 5 5 0 0 1 -14 -9 L -36 -9 A 10 10 0 0 0 -46 -19 L -46 -24 A 22 22 0 0 1 -24 -46 L -19 -46 A 10 10 0 0 0 -9 -36 Z" fill="#F3EEE5" />
+      <circle cx="-46" cy="-46" r="18" fill="#1E3A52" />
+      <path d="M -9 -36 L -9 -14 A 5 5 0 0 1 -14 -9 L -36 -9 A 10 10 0 0 0 -46 -19 L -46 -24 A 22 22 0 0 1 -24 -46 L -19 -46 A 10 10 0 0 0 -9 -36 Z" fill="#2A3F5F" />
     </g>
 
     <!-- Bottom-Left -->
     <g transform="rotate(270)">
-      <circle cx="-46" cy="-46" r="18" fill="#F3EEE5" />
-      <path d="M -9 -36 L -9 -14 A 5 5 0 0 1 -14 -9 L -36 -9 A 10 10 0 0 0 -46 -19 L -46 -24 A 22 22 0 0 1 -24 -46 L -19 -46 A 10 10 0 0 0 -9 -36 Z" fill="#F3EEE5" />
+      <circle cx="-46" cy="-46" r="18" fill="#1E2F45" />
+      <path d="M -9 -36 L -9 -14 A 5 5 0 0 1 -14 -9 L -36 -9 A 10 10 0 0 0 -46 -19 L -46 -24 A 22 22 0 0 1 -24 -46 L -19 -46 A 10 10 0 0 0 -9 -36 Z" fill="#2A3F5F" />
     </g>
 
-    <!-- Bottom-Right (Emerald Occupied Seat) -->
+    <!-- Bottom-Right (Teal/Emerald Occupied Seat) -->
     <g transform="rotate(180)">
-      <circle cx="-46" cy="-46" r="18" fill="#10B981" />
-      <path d="M -9 -36 L -9 -14 A 5 5 0 0 1 -14 -9 L -36 -9 A 10 10 0 0 0 -46 -19 L -46 -24 A 22 22 0 0 1 -24 -46 L -19 -46 A 10 10 0 0 0 -9 -36 Z" fill="#F3EEE5" />
+      <circle cx="-46" cy="-46" r="18" fill="#14B8A6" />
+      <path d="M -9 -36 L -9 -14 A 5 5 0 0 1 -14 -9 L -36 -9 A 10 10 0 0 0 -46 -19 L -46 -24 A 22 22 0 0 1 -24 -46 L -19 -46 A 10 10 0 0 0 -9 -36 Z" fill="#2A3F5F" />
     </g>
   </g>
 
   <!-- Typography: OCCUPIE -->
-  <text x="82" y="49" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="28" font-weight="800" letter-spacing="0.12em" fill="#F3EEE5">
+  <text x="82" y="49" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="28" font-weight="800" letter-spacing="0.12em" fill="#1E3A52">
     OCCUPIE
   </text>
 </svg>

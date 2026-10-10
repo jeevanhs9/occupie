@@ -4,6 +4,11 @@ import { BrandAnimation } from './BrandAnimation';
 const FRAME_COUNT = 120;
 const FRAME_DIRECTORY = '/frames/';
 const DECODED_FRAME_LIMIT = 8;
+const LOGO_LAST_FRAME = 119;
+const LOGO_COMPLETE_FRAME = 108;
+const LOGO_COMPLETE_AT = 0.46;
+const LOGO_HOLD_UNTIL = 0.68;
+const LOGO_SEQUENCE_END = 0.8;
 
 const NARRATIVE = [
   { at: 0, eyebrow: 'The arrival', lines: ['An exceptional welcome', 'begins before the first course.'] },
@@ -20,6 +25,16 @@ function narrativeIndexFor(progress) {
     if (progress >= NARRATIVE[index].at) return index;
   }
   return 0;
+}
+
+function logoProgressForScene(progress) {
+  if (progress <= LOGO_COMPLETE_AT) {
+    return (progress / LOGO_COMPLETE_AT) * (LOGO_COMPLETE_FRAME / LOGO_LAST_FRAME);
+  }
+  if (progress <= LOGO_HOLD_UNTIL) return LOGO_COMPLETE_FRAME / LOGO_LAST_FRAME;
+
+  const exitProgress = clamp01((progress - LOGO_HOLD_UNTIL) / (LOGO_SEQUENCE_END - LOGO_HOLD_UNTIL));
+  return (LOGO_COMPLETE_FRAME + ((LOGO_LAST_FRAME - LOGO_COMPLETE_FRAME) * exitProgress)) / LOGO_LAST_FRAME;
 }
 
 /**
@@ -242,8 +257,13 @@ export function CinematicScene({ renderScene, playbackEnabled = true }) {
       progressRef.current = progress;
 
       // One scroll value drives the scene frame, logo handoff, and copy exit.
-      const logoProgress = reducedMotionRef.current ? 0 : clamp01(progress / 0.34);
-      const logoHandoff = reducedMotionRef.current ? 1 : clamp01((progress - 0.31) / 0.12);
+      // Frame 108 is the first stable complete logo composition, including the
+      // tagline. Hold it over a generous scroll interval before handing off to
+      // the shared navigation logo; using the same progress keeps reversal exact.
+      const logoProgress = reducedMotionRef.current
+        ? LOGO_COMPLETE_FRAME / LOGO_LAST_FRAME
+        : logoProgressForScene(progress);
+      const logoHandoff = reducedMotionRef.current ? 1 : clamp01((progress - 0.76) / 0.16);
       const copyExit = reducedMotionRef.current ? 0 : clamp01((progress - 0.82) / 0.17);
       logoAnimationRef.current?.render(logoProgress);
       stage?.style.setProperty('--scene-progress', progress.toFixed(4));

@@ -2,16 +2,8 @@ from datetime import datetime, timedelta, timezone
 
 
 def test_customer_to_floor_staff_service_workflow(
-    client, manager_client, staff_client_factory, monkeypatch,
+    client, manager_client, staff_client_factory,
 ):
-    sent_tokens = {}
-
-    def capture_action_token(user, purpose, token):
-        sent_tokens[purpose] = token
-        return False
-
-    monkeypatch.setattr('app.routes.auth._send_token', capture_action_token)
-
     table = manager_client.post('/api/v1/tables', json={
         'id': 'T01',
         'name': 'Window Table',
@@ -27,9 +19,7 @@ def test_customer_to_floor_staff_service_workflow(
         'password': 'a-secure-test-password',
     })
     assert registered.status_code == 201
-    assert registered.get_json()['verificationEmailSent'] is False
-    assert 'verify' in sent_tokens
-    assert client.post('/api/auth/verify', json={'token': sent_tokens['verify']}).status_code == 200
+    assert registered.get_json()['message'] == 'Account created. You can now sign in.'
 
     signed_in = client.post('/api/auth/login', json={
         'email': 'jordan@example.test',

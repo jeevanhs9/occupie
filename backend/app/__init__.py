@@ -31,6 +31,15 @@ def create_app(config_class=Config):
         app.config.from_object(config_class)
 
     if app.config.get('APP_ENV') == 'production' or production_requested:
+        missing_environment = [
+            key for key in ('SECRET_KEY', 'JWT_SECRET_KEY', 'DATABASE_URL')
+            if not os.environ.get(key)
+        ]
+        if missing_environment:
+            raise RuntimeError(
+                'Production configuration requires explicit environment variables: '
+                + ', '.join(missing_environment)
+            )
         required = ('SECRET_KEY', 'JWT_SECRET_KEY', 'SQLALCHEMY_DATABASE_URI')
         missing = [key for key in required if not app.config.get(key)]
         if missing:

@@ -1,8 +1,10 @@
 from datetime import datetime, timedelta, timezone
+from urllib.parse import parse_qs, urlparse
 
 from flask_jwt_extended import create_access_token, decode_token
 from app.extensions import db
 from app.models import Restaurant, RestaurantMembership, User
+from app.routes.auth import _token_hash
 
 
 def register(client, *, name='Test Guest', email='test@example.com', password='a-secure-test-password', role=None):
@@ -12,20 +14,15 @@ def register(client, *, name='Test Guest', email='test@example.com', password='a
     return client.post('/api/auth/register', json=data)
 
 
-def test_register_creates_unverified_customer_and_ignores_submitted_role(client, app, monkeypatch):
-    sent = {}
-    monkeypatch.setattr('app.routes.auth._send_token', lambda user, purpose, token: sent.update(token=token, purpose=purpose) or False)
+def test_register_creates_verified_customer_and_ignores_submitted_role(client):
     response = register(client, role='manager')
 
     assert response.status_code == 201
-    assert response.get_json()['verificationEmailSent'] is False
-    assert sent['purpose'] == 'verify'
+    assert 'verificationEmailSent' not in response.get_json()
     user = User.query.filter_by(email='test@example.com').one()
     assert user.role == 'customer'
-    assert user.email_verified_at is None
-    assert user.verification_token_hash
-    assert client.post('/api/auth/verify', json={'token': sent['token']}).status_code == 200
-    assert User.query.filter_by(email='test@example.com').one().email_verified_at
+    assert user.email_verified_at is not None
+    assert user.verification_token_hash is None
 
 
 def test_register_rejects_invalid_email_and_short_password(client):
@@ -45,15 +42,8 @@ def test_registration_is_rate_limited(client, monkeypatch):
     assert register(client, email='limited-final@example.test').status_code == 429
 
 
-def test_login_requires_verified_email_and_sets_http_only_cookies(client, app):
+def test_login_works_immediately_and_sets_http_only_cookies(client):
     register(client)
-    rejected = client.post('/api/auth/login', json={'email': 'test@example.com', 'password': 'a-secure-test-password'})
-    assert rejected.status_code == 403
-    with app.app_context():
-        user = User.query.filter_by(email='test@example.com').one()
-        user.email_verified_at = datetime.now(timezone.utc)
-        db.session.commit()
-
     response = client.post('/api/auth/login', json={'email': 'test@example.com', 'password': 'a-secure-test-password'})
     assert response.status_code == 200
     assert 'access_token' not in response.get_json()
@@ -107,31 +97,47 @@ def test_logout_still_revokes_session_when_access_cookie_has_expired(manager_cli
     assert manager_client.post('/api/auth/refresh', headers={'X-CSRF-TOKEN': refresh_csrf}).status_code == 401
 
 
-def test_password_reset_uses_expiring_one_time_token(client, app, monkeypatch):
+def test_password_reset_uses_expiring_one_time_token(client, app):
     register(client)
+    forgot = client.post('/api/auth/forgot-password', json={'email': 'test@example.com'})
+    assert forgot.status_code == 200
+    assert forgot.get_json()['message'] == client.post(
+        '/api/auth/forgot-password', json={'email': 'missing@example.com'},
+    ).get_json()['message']
+    token = parse_qs(urlparse(forgot.get_json()['developmentResetUrl']).query)['token'][0]
     with app.app_context():
         user = User.query.filter_by(email='test@example.com').one()
-        user.email_verified_at = datetime.now(timezone.utc)
-        db.session.commit()
-    sent = {}
-    monkeypatch.setattr('app.routes.auth._send_token', lambda user, purpose, token: sent.update(token=token, purpose=purpose) or False)
-
-    assert client.post('/api/auth/forgot-password', json={'email': 'test@example.com'}).status_code == 200
-    reset = client.post('/api/auth/reset-password', json={'token': sent['token'], 'password': 'another-secure-password'})
+        assert user.password_reset_token_hash == _token_hash(token)
+        assert user.password_reset_token_hash != token
+    reset = client.post('/api/auth/reset-password', json={'token': token, 'password': 'another-secure-password'})
     assert reset.status_code == 200
-    assert client.post('/api/auth/reset-password', json={'token': sent['token'], 'password': 'third-secure-password'}).status_code == 400
+    assert client.post('/api/auth/reset-password', json={'token': token, 'password': 'third-secure-password'}).status_code == 400
     assert client.post('/api/auth/login', json={'email': 'test@example.com', 'password': 'another-secure-password'}).status_code == 200
 
 
-def test_expired_verification_token_is_rejected(client, app, monkeypatch):
-    sent = {}
-    monkeypatch.setattr('app.routes.auth._send_token', lambda user, purpose, token: sent.update(token=token, purpose=purpose) or False)
+def test_password_reset_link_is_not_returned_outside_development(client, app):
     register(client)
+    old_testing = app.config['TESTING']
+    app.config['APP_ENV'] = 'production'
+    app.config['TESTING'] = False
+    try:
+        response = client.post('/api/auth/forgot-password', json={'email': 'test@example.com'})
+    finally:
+        app.config['APP_ENV'] = 'development'
+        app.config['TESTING'] = old_testing
+    assert response.status_code == 200
+    assert 'developmentResetUrl' not in response.get_json()
+
+
+def test_expired_verification_token_is_rejected(client, app):
+    register(client)
+    token = 'legacy-verification-token'
     with app.app_context():
         user = User.query.filter_by(email='test@example.com').one()
+        user.verification_token_hash = _token_hash(token)
         user.verification_expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
         db.session.commit()
-    assert client.post('/api/auth/verify', json={'token': sent['token']}).status_code == 400
+    assert client.post('/api/auth/verify', json={'token': token}).status_code == 400
 
 
 def test_customer_cannot_access_staff_mutations(customer_client):

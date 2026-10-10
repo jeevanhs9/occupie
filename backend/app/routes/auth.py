@@ -19,6 +19,7 @@ from flask_jwt_extended import (
 from sqlalchemy.exc import IntegrityError
 
 from app.extensions import db, limiter
+from app.middleware.auth import jwt_authenticated
 from app.models import Restaurant, RestaurantMembership, RevokedToken, User
 from app.services.email import send_action_email
 
@@ -90,11 +91,10 @@ def register():
         return jsonify(message='An account with this email already exists.'), 409
 
     user = User(name=name.strip(), email=normalized_email, role='customer', password=password)
-    # Public clients cannot assign an operational role, even if they submit one.
-    user.email_verified_at = None
-    raw_token = secrets.token_urlsafe(32)
-    user.verification_token_hash = _token_hash(raw_token)
-    user.verification_expires_at = datetime.now(timezone.utc) + TOKEN_TTL
+    # Registration is email-verification-free for the current prototype. Public
+    # clients still cannot assign operational roles; staff access comes from a
+    # trusted RestaurantMembership row.
+    user.email_verified_at = datetime.now(timezone.utc)
     db.session.add(user)
     try:
         db.session.commit()
@@ -106,15 +106,8 @@ def register():
         current_app.logger.exception('Account registration failed')
         return jsonify(message='Registration could not be completed. Please try again.'), 503
 
-    try:
-        sent = _send_token(user, 'verify', raw_token)
-    except Exception:
-        current_app.logger.exception('Verification email delivery failed')
-        sent = False
     return jsonify({
-        'message': 'Account created. Verify your email before signing in.',
-        'verificationEmailSent': sent,
-        'deliveryConfigured': bool(current_app.config.get('MAIL_SERVER')),
+        'message': 'Account created. You can now sign in.',
     }), 201
 
 
@@ -168,8 +161,6 @@ def login():
     user = User.query.filter_by(email=email.strip().lower()).first() if isinstance(email, str) else None
     if not user or not isinstance(password, str) or not user.check_password(password):
         return jsonify(message='Invalid email or password.'), 401
-    if not user.email_verified_at:
-        return jsonify(message='Verify your email before signing in.', code='email_not_verified'), 403
     return _issue_cookies(user), 200
 
 
@@ -222,7 +213,7 @@ def logout():
 
 
 @auth_bp.route('/me', methods=['GET'])
-@jwt_required()
+@jwt_authenticated
 def me():
     user = get_current_user()
     if not user:
@@ -234,18 +225,38 @@ def me():
 @limiter.limit('5 per hour')
 def forgot_password():
     email = _json_body().get('email')
-    if isinstance(email, str) and EMAIL_PATTERN.fullmatch(email.strip()):
-        user = User.query.filter_by(email=email.strip().lower()).first()
-        if user and user.email_verified_at:
-            raw_token = secrets.token_urlsafe(32)
-            user.password_reset_token_hash = _token_hash(raw_token)
-            user.password_reset_expires_at = datetime.now(timezone.utc) + RESET_TTL
-            db.session.commit()
+    if not isinstance(email, str) or not EMAIL_PATTERN.fullmatch(email.strip()):
+        return jsonify(message='Enter a valid email address.'), 422
+
+    normalized_email = email.strip().lower()
+    user = User.query.filter_by(email=normalized_email).first()
+    development_reset_allowed = (
+        current_app.testing or current_app.config.get('APP_ENV') == 'development'
+    )
+    mail_configured = bool(current_app.config.get('MAIL_SERVER'))
+    response_body = {
+        'message': 'If an account matches that address, password reset instructions are available through the configured recovery flow.',
+        'deliveryConfigured': mail_configured,
+    }
+
+    if user and (mail_configured or development_reset_allowed):
+        raw_token = secrets.token_urlsafe(32)
+        user.password_reset_token_hash = _token_hash(raw_token)
+        user.password_reset_expires_at = datetime.now(timezone.utc) + RESET_TTL
+        db.session.commit()
+        sent = False
+        if mail_configured:
             try:
-                _send_token(user, 'reset', raw_token)
+                sent = _send_token(user, 'reset', raw_token)
             except Exception:
                 current_app.logger.exception('Password-reset email delivery failed')
-    return jsonify(message='If an account matches that address, password reset instructions will be sent.'), 200
+        if not sent and development_reset_allowed:
+            # This field is only included by the development/test app. A
+            # production deployment never returns reset credentials.
+            response_body['developmentResetUrl'] = (
+                f"{current_app.config['FRONTEND_PUBLIC_URL']}/auth/reset-password?token={raw_token}"
+            )
+    return jsonify(response_body), 200
 
 
 @auth_bp.route('/reset-password', methods=['POST'])

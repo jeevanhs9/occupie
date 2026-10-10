@@ -18,9 +18,9 @@ This is the backend for Occupie: Adaptive Seating Intelligence for Smart Restaur
 
 ### Getting Started
 
-1. **Create and Activate Virtual Environment in PowerShell**
+1. **Create and Activate Virtual Environment in PowerShell** (skip if `backend/venv` already exists)
    ```powershell
-   cd D:\occupie\backend
+   cd E:\Occupie\backend
    python -m venv venv
    .\venv\Scripts\Activate.ps1
    ```
@@ -31,7 +31,7 @@ This is the backend for Occupie: Adaptive Seating Intelligence for Smart Restaur
    ```
 
 3. **Configure Database & Environment**
-   Ensure PostgreSQL is running. Open `psql` or pgAdmin and run:
+   For PostgreSQL, ensure it is running and create the database in `psql` or pgAdmin:
    ```sql
    CREATE DATABASE occupie_db;
    ```
@@ -40,18 +40,18 @@ This is the backend for Occupie: Adaptive Seating Intelligence for Smart Restaur
    ```powershell
    Copy-Item .env.example .env
    ```
-   Edit `.env` and configure `DATABASE_URL` if your PostgreSQL username/password differ.
+   Edit `.env` and configure `DATABASE_URL`. When it is blank, development uses the existing SQLite file at `backend/instance/occupie_dev.db`.
 
-4. **Initialize Migrations**
+4. **Apply Migrations**
+   The repository already contains its migration history. Apply it with:
    ```powershell
-   flask db init
-   flask db migrate -m "Initial migration"
    flask db upgrade
    ```
+   Create a new migration only when a model/schema change requires one.
 
 5. **Run the Application**
    ```powershell
-   flask run
+   .\venv\Scripts\python.exe run.py
    ```
    Access the healthcheck endpoint at: http://localhost:5000/api/health
 

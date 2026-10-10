@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { motion, useInView, useReducedMotion } from 'framer-motion';
 import { ArrowUpRight, CalendarDays, Sparkles, UsersRound } from 'lucide-react';
 import { MOCK_TABLES } from '../../services/mockData';
 import { FloorPlan } from '../../components/dashboard/FloorPlan';
@@ -11,9 +12,86 @@ const roles = [
   ['04', 'Customer', 'A reservation request shaped by party size, time, and preference.'],
 ];
 
+// Cinematic scroll animation variants
+const cinematicEase = [0.22, 1, 0.36, 1];
+
+const headlineLineVariants = {
+  hidden: { 
+    opacity: 0, 
+    y: 40,
+    clipPath: 'inset(0 0 100% 0)'
+  },
+  visible: (custom) => ({
+    opacity: 1,
+    y: 0,
+    clipPath: 'inset(0 0 0% 0)',
+    transition: {
+      duration: 1.2,
+      delay: custom * 0.15,
+      ease: cinematicEase
+    }
+  })
+};
+
+const supportContentVariants = {
+  hidden: { opacity: 0, y: 24 },
+  visible: (custom) => ({
+    opacity: 1,
+    y: 0,
+    transition: {
+      duration: 0.8,
+      delay: 0.6 + custom * 0.12,
+      ease: cinematicEase
+    }
+  })
+};
+
+const dashboardVariants = {
+  hidden: { 
+    opacity: 0, 
+    y: 60,
+    rotateX: 8,
+    scale: 0.94
+  },
+  visible: {
+    opacity: 1,
+    y: 0,
+    rotateX: 0,
+    scale: 1,
+    transition: {
+      duration: 1.4,
+      delay: 0.3,
+      ease: cinematicEase
+    }
+  }
+};
+
+const dashboardChildVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: (custom) => ({
+    opacity: 1,
+    y: 0,
+    transition: {
+      duration: 0.7,
+      delay: 0.8 + custom * 0.08,
+      ease: cinematicEase
+    }
+  })
+};
+
 export function ProductStory() {
   const productStoryRef = useRef(null);
+  const operatingRoomRef = useRef(null);
+  const shouldReduceMotion = useReducedMotion();
+  
+  // Use framer-motion's useInView for the main cinematic section
+  const isOperatingRoomInView = useInView(operatingRoomRef, {
+    once: true,
+    amount: 0.2,
+    margin: '0px 0px -100px 0px'
+  });
 
+  // Preserve existing reveal logic for other sections
   useEffect(() => {
     const root = productStoryRef.current;
     const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -33,29 +111,109 @@ export function ProductStory() {
 
   return (
     <div ref={productStoryRef} className="product-story">
-      <section id="product" className="editorial-story" aria-labelledby="operating-room-title">
+      <section 
+        ref={operatingRoomRef}
+        id="product" 
+        className="editorial-story" 
+        aria-labelledby="operating-room-title"
+        style={{ perspective: '2000px' }}
+      >
         <div className="operating-room-layout">
+          {/* Animated Copy Section */}
           <div className="operating-room-copy">
-            <p className="eyebrow">The rhythm of a dining room</p>
+            <motion.p 
+              className="eyebrow"
+              initial={shouldReduceMotion ? false : { opacity: 0, y: 16 }}
+              animate={isOperatingRoomInView ? { opacity: 1, y: 0 } : {}}
+              transition={{ duration: 0.6, ease: cinematicEase }}
+            >
+              The rhythm of a dining room
+            </motion.p>
+            
             <h2 id="operating-room-title" className="editorial-headline">
-              <span>Every table.</span>
-              <span>Smarter seating.</span>
-              <span>Less waiting.</span>
+              <motion.span
+                custom={0}
+                initial={shouldReduceMotion ? false : "hidden"}
+                animate={isOperatingRoomInView ? "visible" : "hidden"}
+                variants={headlineLineVariants}
+              >
+                Every table.
+              </motion.span>
+              <motion.span
+                custom={1}
+                initial={shouldReduceMotion ? false : "hidden"}
+                animate={isOperatingRoomInView ? "visible" : "hidden"}
+                variants={headlineLineVariants}
+              >
+                Smarter seating.
+              </motion.span>
+              <motion.span
+                custom={2}
+                initial={shouldReduceMotion ? false : "hidden"}
+                animate={isOperatingRoomInView ? "visible" : "hidden"}
+                variants={headlineLineVariants}
+              >
+                Less waiting.
+              </motion.span>
             </h2>
+            
             <div className="editorial-support">
-              <p className="eyebrow">Clear decisions, calmer service</p>
-              <p>Occupie weighs party size, table capacity and availability, reservation commitments, and walk-in order before suggesting who to seat. The host stays in control, and wait estimates remain blank when reliable turnover data is unavailable.</p>
-              <Link to="/auth/login" className="inline-link">Explore the operating room <ArrowUpRight size={15} /></Link>
+              <motion.p 
+                className="eyebrow"
+                custom={0}
+                initial={shouldReduceMotion ? false : "hidden"}
+                animate={isOperatingRoomInView ? "visible" : "hidden"}
+                variants={supportContentVariants}
+              >
+                Clear decisions, calmer service
+              </motion.p>
+              <motion.p
+                custom={1}
+                initial={shouldReduceMotion ? false : "hidden"}
+                animate={isOperatingRoomInView ? "visible" : "hidden"}
+                variants={supportContentVariants}
+              >
+                Occupie weighs party size, table capacity and availability, reservation commitments, and walk-in order before suggesting who to seat. The host stays in control, and wait estimates remain blank when reliable turnover data is unavailable.
+              </motion.p>
+              <motion.div
+                custom={2}
+                initial={shouldReduceMotion ? false : "hidden"}
+                animate={isOperatingRoomInView ? "visible" : "hidden"}
+                variants={supportContentVariants}
+              >
+                <Link to="/auth/login" className="inline-link cinematic-link">
+                  Explore the operating room <ArrowUpRight size={15} />
+                </Link>
+              </motion.div>
             </div>
           </div>
 
-          <div className="operating-room-demo">
-            <div className="editorial-plan-heading">
+          {/* Animated Dashboard Preview */}
+          <motion.div 
+            className="operating-room-demo cinematic-dashboard"
+            initial={shouldReduceMotion ? false : "hidden"}
+            animate={isOperatingRoomInView ? "visible" : "hidden"}
+            variants={dashboardVariants}
+          >
+            <motion.div 
+              className="editorial-plan-heading"
+              custom={0}
+              initial={shouldReduceMotion ? false : "hidden"}
+              animate={isOperatingRoomInView ? "visible" : "hidden"}
+              variants={dashboardChildVariants}
+            >
               <p className="eyebrow">A shared view of the room</p>
               <span>Demonstration · sample table states</span>
-            </div>
-            <FloorPlan className="floor-plan--editorial" tables={MOCK_TABLES.slice(0, 4)} />
-          </div>
+            </motion.div>
+            <motion.div
+              custom={1}
+              initial={shouldReduceMotion ? false : "hidden"}
+              animate={isOperatingRoomInView ? "visible" : "hidden"}
+              variants={dashboardChildVariants}
+            >
+              <FloorPlan className="floor-plan--editorial" tables={MOCK_TABLES.slice(0, 4)} />
+            </motion.div>
+          </motion.div>
         </div>
       </section>
 

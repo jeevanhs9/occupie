@@ -19,10 +19,10 @@ def health_check():
         db.session.execute(text("SELECT 1"))
         db.session.commit()
         status["database"] = "connected"
-    except Exception as e:
+    except Exception:
         status["status"] = "error"
-        status["database"] = f"disconnected ({str(e)})"
-        current_app.logger.error(f"Database health check failed: {e}")
+        status["database"] = "disconnected"
+        current_app.logger.exception("Database health check failed")
         return jsonify(status), 503
 
     return jsonify(status), 200

@@ -3,6 +3,11 @@ import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react
 const FRAME_COUNT = 120;
 const FRAME_DIRECTORY = '/logo-animation-frames/';
 const CACHE_LIMIT = 6;
+// Measured from the alpha bounds of the complete logo/tagline in frames 93–119.
+// A little breathing room keeps the outer mark shapes and tagline from clipping.
+const COMPLETE_LOGO_CROP = { x: 530, y: 240, width: 860, height: 640 };
+const CROP_START_FRAME = 72;
+const CROP_COMPLETE_FRAME = 100;
 
 const framePath = (index) => `${FRAME_DIRECTORY}frame_${String(index).padStart(4, '0')}.png`;
 const clamp01 = (value) => Math.max(0, Math.min(1, value));
@@ -64,11 +69,31 @@ export const LogoFrameAnimation = forwardRef(function LogoFrameAnimation(
 
     const drawFrame = (index, bitmap) => {
       resizeCanvas();
-      const scale = Math.max(drawingWidth / bitmap.width, drawingHeight / bitmap.height);
-      const width = bitmap.width * scale;
-      const height = bitmap.height * scale;
+
+      // The source sequence is 16:9 with the actual logo occupying only its
+      // center. Ease into the measured transparent bounds as the mark forms,
+      // then keep a fixed crop so the completed wordmark never jumps in size.
+      const cropProgress = clamp01((index - CROP_START_FRAME) / (CROP_COMPLETE_FRAME - CROP_START_FRAME));
+      const easedCropProgress = cropProgress * cropProgress * (3 - (2 * cropProgress));
+      const sourceX = COMPLETE_LOGO_CROP.x * easedCropProgress;
+      const sourceY = COMPLETE_LOGO_CROP.y * easedCropProgress;
+      const sourceWidth = bitmap.width + ((COMPLETE_LOGO_CROP.width - bitmap.width) * easedCropProgress);
+      const sourceHeight = bitmap.height + ((COMPLETE_LOGO_CROP.height - bitmap.height) * easedCropProgress);
+      const scale = Math.min(drawingWidth / sourceWidth, drawingHeight / sourceHeight);
+      const width = sourceWidth * scale;
+      const height = sourceHeight * scale;
       context.clearRect(0, 0, drawingWidth, drawingHeight);
-      context.drawImage(bitmap, (drawingWidth - width) / 2, (drawingHeight - height) / 2, width, height);
+      context.drawImage(
+        bitmap,
+        sourceX,
+        sourceY,
+        sourceWidth,
+        sourceHeight,
+        (drawingWidth - width) / 2,
+        (drawingHeight - height) / 2,
+        width,
+        height,
+      );
       canvas.dataset.frameIndex = String(index).padStart(4, '0');
       decodedFrame = index;
     };

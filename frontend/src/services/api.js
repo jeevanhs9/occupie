@@ -9,7 +9,12 @@ function csrfToken(cookieName) {
   if (typeof document === 'undefined') return '';
   const prefix = `${cookieName}=`;
   const pair = document.cookie.split('; ').find((cookie) => cookie.startsWith(prefix));
-  return pair ? decodeURIComponent(pair.slice(prefix.length)) : '';
+  if (!pair) return '';
+  try {
+    return decodeURIComponent(pair.slice(prefix.length));
+  } catch {
+    return '';
+  }
 }
 
 async function send(url, options = {}, csrfCookie = 'occupie_csrf_access') {
@@ -27,7 +32,11 @@ async function send(url, options = {}, csrfCookie = 'occupie_csrf_access') {
       ? { success: true, data, status: response.status }
       : { success: false, error: data?.message || data?.error || `Request failed with status ${response.status}.`, status: response.status, data };
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Unable to connect to the Occupie API.', isNetworkError: true };
+    return {
+      success: false,
+      error: 'Unable to reach the Occupie API. Start the Flask backend and check the API URL configuration.',
+      isNetworkError: true,
+    };
   }
 }
 
