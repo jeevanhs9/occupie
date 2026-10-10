@@ -18,10 +18,10 @@ export function CinematicScene({ renderScene, playbackEnabled = true }) {
   const sectionRef = useRef(null);
   const videoRef = useRef(null);
   const animationFrameRef = useRef(null);
+  const progressRef = useRef(0);
   const [progress, setProgress] = useState(0);
   const [videoReady, setVideoReady] = useState(false);
   const [videoError, setVideoError] = useState(false);
-  const [autoplayBlocked, setAutoplayBlocked] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(() => Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches));
 
   useEffect(() => {
@@ -32,21 +32,15 @@ export function CinematicScene({ renderScene, playbackEnabled = true }) {
     return () => query?.removeEventListener?.('change', updatePreference);
   }, []);
 
-  const attemptPlayback = useCallback(() => {
+  const syncVideoToProgress = useCallback((nextProgress) => {
     const video = videoRef.current;
-    if (!video || reducedMotion || videoError || renderScene || !playbackEnabled) return;
-    video.muted = true;
-    const playback = video.play();
-    playback?.catch?.(() => setAutoplayBlocked(true));
+    if (!video || reducedMotion || videoError || renderScene || !playbackEnabled || !Number.isFinite(video.duration)) return;
+    // Keep the final frame inside the media duration so browsers do not clamp it back
+    // to the previous frame when the scroll reaches the end of the section.
+    const lastVisibleTime = Math.max(0, video.duration - 1 / 30);
+    const targetTime = Math.min(lastVisibleTime, Math.max(0, nextProgress * lastVisibleTime));
+    if (Math.abs(video.currentTime - targetTime) > 0.025) video.currentTime = targetTime;
   }, [playbackEnabled, reducedMotion, renderScene, videoError]);
-
-  useEffect(() => {
-    if (reducedMotion || !playbackEnabled) {
-      videoRef.current?.pause();
-      return;
-    }
-    if (videoReady) attemptPlayback();
-  }, [attemptPlayback, playbackEnabled, reducedMotion, videoReady]);
 
   useEffect(() => {
     const updateProgress = () => {
@@ -56,6 +50,8 @@ export function CinematicScene({ renderScene, playbackEnabled = true }) {
       const distance = Math.max(section.offsetHeight - window.innerHeight, 1);
       const travelled = -section.getBoundingClientRect().top;
       const nextProgress = Math.max(0, Math.min(1, travelled / distance));
+      progressRef.current = nextProgress;
+      syncVideoToProgress(nextProgress);
       setProgress((current) => Math.abs(current - nextProgress) > 0.008 ? nextProgress : current);
     };
     const requestUpdate = () => {
@@ -67,9 +63,12 @@ export function CinematicScene({ renderScene, playbackEnabled = true }) {
     return () => {
       window.removeEventListener('scroll', requestUpdate);
       window.removeEventListener('resize', requestUpdate);
-      if (animationFrameRef.current) window.cancelAnimationFrame(animationFrameRef.current);
+      if (animationFrameRef.current !== null) {
+        window.cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
     };
-  }, []);
+  }, [syncVideoToProgress]);
 
   const narrative = narrativeFor(progress);
 
@@ -82,15 +81,12 @@ export function CinematicScene({ renderScene, playbackEnabled = true }) {
               ref={videoRef}
               className="cinematic-video"
               poster="/frames/frame_0001.webp"
-              autoPlay={!reducedMotion && playbackEnabled}
               muted
               playsInline
-              loop={!reducedMotion}
               preload="auto"
-              controls={autoplayBlocked}
-              onCanPlay={() => { setVideoReady(true); attemptPlayback(); }}
+              onLoadedMetadata={() => { setVideoReady(true); syncVideoToProgress(progressRef.current); }}
               onError={() => setVideoError(true)}
-              aria-label="Restaurant entrance and dining room film"
+              aria-label="Restaurant film that advances and reverses as you scroll"
             >
               <source src="/videos/occupie-restaurant-hero.mp4" type="video/mp4" />
             </video>
@@ -107,7 +103,7 @@ export function CinematicScene({ renderScene, playbackEnabled = true }) {
         <div className="journey-progress" aria-hidden="true"><span style={{ transform: `scaleX(${progress})` }} /></div>
         {!renderScene && !videoReady && !videoError && <p className="video-status">Preparing the dining room</p>}
         {videoError && !renderScene && <p className="video-status">The restaurant film could not be loaded.</p>}
-        {autoplayBlocked && !videoError && <p className="video-status">Playback is ready. Use the video controls to begin.</p>}
+        {!renderScene && reducedMotion && <p className="video-status">Reduced motion is on. The opening scene is held still.</p>}
         <p className="scroll-prompt">Scroll to enter <span aria-hidden="true">↓</span></p>
       </div>
     </section>
