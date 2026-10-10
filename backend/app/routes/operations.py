@@ -557,6 +557,15 @@ def seat_waitlist_entry(entry_id):
 
 @operations_bp.route('/allocations/recommend', methods=['GET'])
 def allocation_recommendation():
+    """Enhanced allocation recommendation using adaptive scoring.
+    
+    Query params:
+        party_size (required): Number of guests
+        at (optional): ISO 8601 datetime for seating
+        preferred_section (optional): Preferred table section
+        return_alternatives (optional): If 'true', return all ranked candidates
+        use_legacy (optional): If 'true', use old deterministic allocator
+    """
     raw_party_size = request.args.get('party_size', '')
     try:
         party_size = int(raw_party_size)
@@ -572,15 +581,64 @@ def allocation_recommendation():
     preferred_section = request.args.get('preferred_section')
     if preferred_section is not None and len(preferred_section) > 80:
         return _error('preferred_section must be 80 characters or fewer.', 422, {'preferred_section': 'Too long.'})
-    table = _recommendation(party_size, at, preferred_section)
-    if table is None:
+    
+    # Support legacy mode for backward compatibility during transition
+    use_legacy = request.args.get('use_legacy', '').lower() == 'true'
+    return_alternatives = request.args.get('return_alternatives', '').lower() == 'true'
+    
+    if use_legacy:
+        # Use old deterministic allocator
+        table = _recommendation(party_size, at, preferred_section)
+        if table is None:
+            return jsonify({
+                'available': False,
+                'recommendation': None,
+                'message': 'No suitable table is currently available.',
+                'strategy': 'legacy_deterministic',
+            }), 200
+        return jsonify({
+            'available': True,
+            'recommendation': table.to_dict(),
+            'strategy': 'legacy_deterministic',
+        }), 200
+    
+    # Use new adaptive scoring engine
+    from app.services.adaptive_allocation import recommend_tables
+    from app.services.allocation_policy import get_policy
+    
+    tables = RestaurantTable.query.filter_by(restaurant_id=g.restaurant_id).all()
+    reservations = Reservation.query.filter_by(restaurant_id=g.restaurant_id).all()
+    
+    recommendations = recommend_tables(
+        tables=tables,
+        party_size=party_size,
+        reservations=reservations,
+        at=at,
+        preferred_section=preferred_section,
+        restaurant_id=g.restaurant_id,
+        return_all_candidates=return_alternatives,
+    )
+    
+    if not recommendations:
         return jsonify({
             'available': False,
-            'recommendation': None,
-            'message': 'No suitable table is currently available. No wait time estimate is available.',
+            'recommendation': None,  # Legacy format
+            'primaryRecommendation': None,
+            'alternatives': [],
+            'message': 'No suitable table is currently available. Occupied table turnover is not predicted.',
+            'strategy': 'adaptive_scoring',
+            'configuration': get_policy(g.restaurant_id).to_dict(),
         }), 200
+    
+    primary = recommendations[0]
+    alternatives = recommendations[1:] if return_alternatives else []
+    
+    # Return both legacy and new format for backward compatibility
     return jsonify({
         'available': True,
-        'recommendation': table.to_dict(),
-        'strategy': 'smallest_suitable_available_table',
+        'recommendation': primary.table.to_dict(),  # Legacy format for existing tests
+        'primaryRecommendation': primary.to_dict(),
+        'alternatives': [alt.to_dict() for alt in alternatives],
+        'strategy': 'adaptive_scoring',
+        'configuration': get_policy(g.restaurant_id).to_dict(),
     }), 200

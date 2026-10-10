@@ -273,7 +273,7 @@ export function CustomerDashboard({ page = 'hub' }) {
 
   return (
     <PageEntrance className="customer-dashboard">
-      <section className="customer-welcome" aria-labelledby="customer-welcome-title">
+      <section id="booking" className="customer-welcome scroll-mt-24" aria-labelledby="customer-welcome-title">
         <div className="customer-welcome__ornament" aria-hidden="true" />
         <div className="customer-welcome__content">
           <p className="customer-eyebrow">{page === 'hub' ? 'A more considered evening' : 'Guest portal'}</p>
@@ -350,7 +350,7 @@ export function CustomerDashboard({ page = 'hub' }) {
 
       {bookingNotice && <Notice notice={bookingNotice} onDismiss={() => setBookingNotice(null)} />}
 
-      {page === 'upcoming' && <section className="customer-section" aria-labelledby="customer-upcoming-title">
+      {page === 'upcoming' && <section id="upcoming" className="customer-section scroll-mt-24" aria-labelledby="customer-upcoming-title">
         <SectionHeading id="customer-upcoming-title" eyebrow="Reserved for you" title="Upcoming reservations" icon={TicketCheck} />
         {loading && reservations.length === 0 ? (
           <LoadingPanel label="Loading your reservations" />
@@ -426,7 +426,7 @@ export function CustomerDashboard({ page = 'hub' }) {
         )}
       </section>}
 
-      {page === 'history' && <section className="customer-section customer-history" aria-labelledby="customer-history-title">
+      {page === 'history' && <section id="history" className="customer-section customer-history scroll-mt-24" aria-labelledby="customer-history-title">
         <SectionHeading id="customer-history-title" eyebrow="Your visits" title="Dining history" icon={History} />
         {history.length ? (
           <div className="customer-record-list">

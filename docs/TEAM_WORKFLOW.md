@@ -1,5 +1,7 @@
 # Occupie — Team Workflow & Development Guidelines
 
+> **Historical workflow notes:** this file contains earlier demo acceptance criteria and says authentication/role authorization are still planned. The current repository implements database-backed JWT authentication and server-side membership authorization. See [audit-report.md](audit-report.md) for current code status and remaining gaps.
+
 ## Folder Ownership
 
 | Team Member | Owned Area | Branch |

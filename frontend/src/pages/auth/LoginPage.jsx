@@ -49,7 +49,6 @@ export function LoginPage() {
           <form onSubmit={submit} className="space-y-4">
             <label className="block text-sm text-slate-200">Email address<input required autoComplete="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="mt-1 block w-full rounded border border-stone-600 bg-stone-950 px-3 py-2 text-white" /></label>
             <label className="block text-sm text-slate-200">Password<input required autoComplete="current-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="mt-1 block w-full rounded border border-stone-600 bg-stone-950 px-3 py-2 text-white" /></label>
-            <div className="text-right"><Link className="text-sm text-amber-200 underline" to="/auth/forgot-password">Forgot password?</Link></div>
             <button disabled={loading} className="gold-action w-full" type="submit">{loading ? 'Signing in…' : 'Sign in'}</button>
           </form>
           <p className="mt-6 border-t border-stone-700 pt-5 text-center text-sm text-stone-300">New to Occupie? <Link to="/auth/register" className="text-amber-200 underline">Create a customer account</Link></p>

@@ -64,7 +64,7 @@ describe('API-backed operational data mode', () => {
     const { result } = renderHook(() => useOperationalData());
 
     await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current.error).toBe('backend offline');
+    expect(result.current.error).toContain('Could not connect to the Occupie API');
     expect(result.current.tables).toEqual([]);
     expect(result.current.reservations).toEqual([]);
     expect(result.current.waitlist).toEqual([]);

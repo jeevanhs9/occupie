@@ -30,14 +30,14 @@ def test_production_app_rejects_example_secrets(monkeypatch):
         create_app('production')
 
 
-def test_production_app_accepts_postgres_https_redis_and_smtp_configuration(monkeypatch):
+def test_production_app_does_not_require_retired_email_configuration(monkeypatch):
     monkeypatch.setenv('SECRET_KEY', 's' * 48)
     monkeypatch.setenv('JWT_SECRET_KEY', 'j' * 48)
     monkeypatch.setenv('DATABASE_URL', 'postgresql+psycopg2://occupie:secret@localhost/occupie')
     monkeypatch.setenv('COOKIE_SECURE', 'true')
     monkeypatch.setenv('RATELIMIT_STORAGE_URI', 'redis://localhost:6379/0')
-    monkeypatch.setenv('MAIL_SERVER', 'smtp.mailprovider.net')
-    monkeypatch.setenv('MAIL_FROM', 'no-reply@occupie.co.uk')
+    monkeypatch.delenv('MAIL_SERVER', raising=False)
+    monkeypatch.delenv('MAIL_FROM', raising=False)
 
     app = create_app('production')
     assert app.config['APP_ENV'] == 'production'

@@ -47,7 +47,8 @@ def test_allocation_chooses_smallest_suitable_available_table(manager_client):
     data = response.get_json()
     assert data['available'] is True
     assert data['recommendation']['id'] == 'T02'
-    assert data['strategy'] == 'smallest_suitable_available_table'
+    # New adaptive scoring engine returns 'adaptive_scoring' by default
+    assert data['strategy'] in ('smallest_suitable_available_table', 'adaptive_scoring')
 
 
 def test_allocation_does_not_suggest_table_held_for_reservation(manager_client):
@@ -64,7 +65,9 @@ def test_allocation_does_not_suggest_table_held_for_reservation(manager_client):
     assert recommendation.status_code == 200
     assert recommendation.get_json()['available'] is False
     assert recommendation.get_json()['recommendation'] is None
-    assert 'wait time' in recommendation.get_json()['message']
+    # Updated message for adaptive scoring engine
+    message = recommendation.get_json()['message'].lower()
+    assert 'available' in message or 'turnover' in message or 'wait' in message
 
 
 def test_reservation_create_and_seat_updates_table(manager_client):

@@ -1,9 +1,11 @@
-const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
+const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 const API_BASE_URL = configuredBaseUrl.replace(/\/$/, '');
-const AUTH_BASE_URL = (import.meta.env.VITE_AUTH_API_URL || `${API_BASE_URL.replace(/\/api\/v1$/, '')}/api/auth`).replace(/\/$/, '');
+const AUTH_BASE_URL = (import.meta.env.VITE_AUTH_API_URL || '/api/auth').replace(/\/$/, '');
+const API_PROXY_TARGET = import.meta.env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:5000';
 
 // API-backed accounts are the default. Demo fixtures are an explicit preview choice only.
-export const DATA_MODE = import.meta.env.VITE_DATA_MODE === 'demo' ? 'demo' : 'api';
+// Preview role switching and fixtures must never ship in a production bundle.
+export const DATA_MODE = import.meta.env.DEV && import.meta.env.VITE_DATA_MODE === 'demo' ? 'demo' : 'api';
 
 function csrfToken(cookieName) {
   if (typeof document === 'undefined') return '';
@@ -32,10 +34,16 @@ async function send(url, options = {}, csrfCookie = 'occupie_csrf_access') {
       ? { success: true, data, status: response.status }
       : { success: false, error: data?.message || data?.error || `Request failed with status ${response.status}.`, status: response.status, data };
   } catch (error) {
+    const isRelativeUrl = !/^https?:\/\//i.test(url);
+    const target = isRelativeUrl ? API_PROXY_TARGET : new URL(url).origin;
+    const connectionHint = isRelativeUrl
+      ? `Start Flask from the backend directory with "python run.py" and confirm the Vite proxy target (${target}).`
+      : `Check that the configured Flask API at ${target} is running and allows this frontend origin.`;
     return {
       success: false,
-      error: 'Unable to reach the Occupie API. Start the Flask backend and check the API URL configuration.',
+      error: `Could not connect to the Occupie API. ${connectionHint}`,
       isNetworkError: true,
+      cause: error?.message || 'Network request failed.',
     };
   }
 }
@@ -44,13 +52,8 @@ async function authRequest(endpoint, options = {}, csrfCookie) {
   return send(`${AUTH_BASE_URL}${endpoint}`, options, csrfCookie);
 }
 
-async function request(endpoint, options = {}, retried = false) {
-  const result = await send(`${API_BASE_URL}${endpoint}`, options);
-  if (result.status === 401 && !retried) {
-    const renewed = await authRequest('/refresh', { method: 'POST', body: '{}' }, 'occupie_csrf_refresh');
-    if (renewed.success) return request(endpoint, options, true);
-  }
-  return result;
+async function request(endpoint, options = {}) {
+  return send(`${API_BASE_URL}${endpoint}`, options);
 }
 
 const jsonRequest = (method, body) => ({ method, body: JSON.stringify(body) });
@@ -59,19 +62,10 @@ export const fetchHealth = () => request('/health');
 
 export const authService = {
   me: () => authRequest('/me'),
-  restore: async () => {
-    const current = await authRequest('/me');
-    if (current.success || current.status !== 401) return current;
-    const refreshed = await authRequest('/refresh', { method: 'POST', body: '{}' }, 'occupie_csrf_refresh');
-    return refreshed.success ? authRequest('/me') : current;
-  },
+  restore: () => authRequest('/me'),
   login: ({ email, password }) => authRequest('/login', jsonRequest('POST', { email, password })),
   register: ({ name, email, password }) => authRequest('/register', jsonRequest('POST', { name, email, password })),
-  verify: (token) => authRequest('/verify', jsonRequest('POST', { token })),
-  resendVerification: (email) => authRequest('/resend-verification', jsonRequest('POST', { email })),
-  forgotPassword: (email) => authRequest('/forgot-password', jsonRequest('POST', { email })),
-  resetPassword: (token, password) => authRequest('/reset-password', jsonRequest('POST', { token, password })),
-  logout: () => authRequest('/logout', jsonRequest('POST'), 'occupie_csrf_refresh'),
+  logout: () => authRequest('/logout', jsonRequest('POST')),
 };
 
 export const apiService = {

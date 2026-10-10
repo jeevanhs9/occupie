@@ -1,5 +1,7 @@
 # Occupie implementation checklist
 
+> **Historical verification record:** the test counts and completion marks below record an earlier implementation pass. They were not re-run as part of the documentation audit dated 2026-10-11. Use [audit-report.md](audit-report.md) for current code status and verification performed in this phase.
+
 This checklist records the audited state and the implementation verified in this pass. It distinguishes local test coverage from deployment/browser checks that require external services.
 
 ## Existing project and protected areas

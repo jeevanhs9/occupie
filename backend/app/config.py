@@ -18,13 +18,9 @@ class Config:
     JWT_COOKIE_CSRF_PROTECT = True
     JWT_COOKIE_SAMESITE = 'Lax'
     JWT_ACCESS_COOKIE_NAME = 'occupie_access'
-    JWT_REFRESH_COOKIE_NAME = 'occupie_refresh'
     JWT_ACCESS_CSRF_COOKIE_NAME = 'occupie_csrf_access'
-    JWT_REFRESH_CSRF_COOKIE_NAME = 'occupie_csrf_refresh'
     JWT_ACCESS_CSRF_HEADER_NAME = 'X-CSRF-TOKEN'
-    JWT_REFRESH_CSRF_HEADER_NAME = 'X-CSRF-TOKEN'
     JWT_ACCESS_TOKEN_EXPIRES = 900
-    JWT_REFRESH_TOKEN_EXPIRES = 604800
     APP_ENV = os.environ.get('FLASK_ENV', 'development').lower()
     AUTO_CREATE_SCHEMA = APP_ENV == 'development'
     FRONTEND_ORIGINS = {
@@ -35,14 +31,6 @@ class Config:
     RATELIMIT_STORAGE_URI = os.environ.get('RATELIMIT_STORAGE_URI', 'memory://')
     RATELIMIT_HEADERS_ENABLED = True
     DEFAULT_RESTAURANT_ID = os.environ.get('DEFAULT_RESTAURANT_ID', 'default')
-    FRONTEND_PUBLIC_URL = os.environ.get('FRONTEND_PUBLIC_URL', 'http://localhost:5173').rstrip('/')
-    MAIL_SERVER = os.environ.get('MAIL_SERVER')
-    MAIL_PORT = int(os.environ.get('MAIL_PORT', '587'))
-    MAIL_USERNAME = os.environ.get('MAIL_USERNAME')
-    MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
-    MAIL_USE_TLS = os.environ.get('MAIL_USE_TLS', 'true').lower() == 'true'
-    MAIL_FROM = os.environ.get('MAIL_FROM', 'no-reply@occupie.local')
-    MAIL_ENABLED = bool(MAIL_SERVER and MAIL_FROM)
 
 class TestConfig(Config):
     TESTING = True

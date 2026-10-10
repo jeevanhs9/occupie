@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
+import { Minus, TrendingDown, TrendingUp } from 'lucide-react';
 
 /**
  * Premium KPI card with animated counter for Manager Dashboard

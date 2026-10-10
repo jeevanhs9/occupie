@@ -20,6 +20,14 @@ function DashboardAccess({ role, children }) {
   return children;
 }
 
+function DashboardIndexRedirect() {
+  const { loading, isAuthenticated, isDemoMode, currentRole } = useRole();
+  if (loading) return <div className="min-h-screen bg-stone-950 p-8 text-stone-200">Restoring your secure session…</div>;
+  if (!isAuthenticated) return <Navigate to="/auth/login" replace />;
+  if (!isDemoMode && !ROLE_CONFIGS[currentRole]) return <Navigate to="/auth/login" replace />;
+  return <Navigate to={ROLE_CONFIGS[currentRole]?.route || ROLE_CONFIGS.customer.route} replace />;
+}
+
 function DemoOnly({ children }) {
   const { isDemoMode } = useRole();
   return isDemoMode ? children : <Navigate to="/auth/login" replace />;
@@ -34,14 +42,14 @@ export function AppRoutes() {
       {/* Authentication & Role Sandbox */}
       <Route path="/auth/login" element={<LoginPage />} />
       <Route path="/auth/register" element={<AuthActionPage />} />
-      <Route path="/auth/verify" element={<AuthActionPage />} />
-      <Route path="/auth/forgot-password" element={<AuthActionPage />} />
-      <Route path="/auth/reset-password" element={<AuthActionPage />} />
+      <Route path="/auth/verify" element={<Navigate to="/auth/login" replace />} />
+      <Route path="/auth/forgot-password" element={<Navigate to="/auth/login" replace />} />
+      <Route path="/auth/reset-password" element={<Navigate to="/auth/login" replace />} />
       <Route path="/auth/demo-roles" element={<DemoOnly><RoleSelectPage /></DemoOnly>} />
 
       {/* Role-Specific Dashboards under shared DashboardLayout */}
       <Route path="/dashboard" element={<DashboardLayout />}>
-        <Route index element={<Navigate to="/dashboard/manager" replace />} />
+        <Route index element={<DashboardIndexRedirect />} />
         <Route path="manager" element={<DashboardAccess role="manager"><ManagerDashboard /></DashboardAccess>} />
         <Route path="host" element={<DashboardAccess role="host"><HostDashboard /></DashboardAccess>} />
         <Route path="floor-staff" element={<DashboardAccess role="floor_staff"><FloorStaffDashboard /></DashboardAccess>} />

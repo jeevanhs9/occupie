@@ -21,6 +21,8 @@ import {
   PlusCircle,
   Ticket,
   History,
+  FileSpreadsheet,
+  CheckCircle2,
   LogOut,
   ChevronRight,
   Store,
@@ -45,6 +47,8 @@ const ICON_MAP = {
   PlusCircle,
   Ticket,
   History,
+  FileSpreadsheet,
+  CheckCircle: CheckCircle2,
 };
 
 export function Sidebar({ isOpen, onClose }) {

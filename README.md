@@ -11,7 +11,7 @@ cd backend
 python -m venv venv
 .\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-Copy-Item .env.example .env
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 flask db upgrade
 python run.py
 ```
@@ -23,7 +23,7 @@ The API runs at `http://localhost:5000`. The checked-in environment example uses
 ```powershell
 cd frontend
 npm install
-Copy-Item .env.example .env
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 npm run dev
 ```
 
@@ -31,7 +31,7 @@ Open `http://localhost:5173`. The frontend defaults to API mode. To preview samp
 
 ## Accounts and roles
 
-Public registration creates a customer account. The verification and password-reset links are sent through SMTP when configured. In development without SMTP, the backend logs the action URL and the registration screen explains where to find it.
+Public registration creates a customer account using name, email, and password. Staff accounts are provisioned through the backend CLI; a browser-supplied role never grants staff access.
 
 Provision operational staff from the backend terminal after migrations:
 
@@ -41,7 +41,7 @@ flask provision-staff --name "Restaurant Manager" --email manager@example.com --
 
 The command prompts for the password and provisions the account for the configured default restaurant. Supported staff roles are `manager`, `host`, and `floor_staff`. Staff permissions come from database-backed restaurant memberships. Customers cannot assign themselves staff roles.
 
-Authentication uses short-lived HTTP-only access and refresh cookies with CSRF protection. The frontend sends cookies with API requests and restores sessions through `/api/auth/me` and `/api/auth/refresh`. Production requires HTTPS cookies, PostgreSQL, strong application secrets, SMTP, and shared rate-limit storage such as Redis.
+Authentication uses a short-lived HTTP-only access cookie with CSRF protection. The frontend restores sessions through `/api/auth/me`; there is no refresh-token, email-verification, or password-reset flow. Production requires HTTPS cookies, PostgreSQL, strong application secrets, and shared rate-limit storage such as Redis.
 
 ## Database migrations
 
@@ -60,7 +60,7 @@ Manager, host, floor staff, and customer operations are checked by the Flask API
 
 ## Configuration
 
-See [docs/SETUP.md](docs/SETUP.md) for environment variables, PostgreSQL, SMTP, Redis, and production setup. See [docs/API_CONTRACT.md](docs/API_CONTRACT.md) for authentication and operations endpoints and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the implementation structure.
+See [docs/SETUP.md](docs/SETUP.md) for environment variables, PostgreSQL, Redis, and production setup. See [docs/api-contract.md](docs/api-contract.md) for authentication and operations endpoints and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the implementation structure.
 
 ## Verification
 

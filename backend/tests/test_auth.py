@@ -1,10 +1,8 @@
 from datetime import datetime, timedelta, timezone
-from urllib.parse import parse_qs, urlparse
 
 from flask_jwt_extended import create_access_token, decode_token
 from app.extensions import db
 from app.models import Restaurant, RestaurantMembership, User
-from app.routes.auth import _token_hash
 
 
 def register(client, *, name='Test Guest', email='test@example.com', password='a-secure-test-password', role=None):
@@ -14,15 +12,16 @@ def register(client, *, name='Test Guest', email='test@example.com', password='a
     return client.post('/api/auth/register', json=data)
 
 
-def test_register_creates_verified_customer_and_ignores_submitted_role(client):
+def test_register_creates_customer_and_ignores_submitted_role(client):
     response = register(client, role='manager')
 
     assert response.status_code == 201
-    assert 'verificationEmailSent' not in response.get_json()
     user = User.query.filter_by(email='test@example.com').one()
     assert user.role == 'customer'
-    assert user.email_verified_at is not None
+    assert user.email_verified_at is None
     assert user.verification_token_hash is None
+    assert user.password_hash != 'a-secure-test-password'
+    assert user.check_password('a-secure-test-password')
 
 
 def test_register_rejects_invalid_email_and_short_password(client):
@@ -35,8 +34,7 @@ def test_duplicate_registration_is_rejected(client):
     assert register(client).status_code == 409
 
 
-def test_registration_is_rate_limited(client, monkeypatch):
-    monkeypatch.setattr('app.routes.auth._send_token', lambda *args: False)
+def test_registration_is_rate_limited(client):
     for index in range(5):
         assert register(client, email=f'limited-{index}@example.test').status_code == 201
     assert register(client, email='limited-final@example.test').status_code == 429
@@ -54,20 +52,16 @@ def test_login_works_immediately_and_sets_http_only_cookies(client):
     assert response.get_json()['user']['role'] == 'customer'
 
 
-def test_me_restores_session_from_cookie_and_logout_invalidates_it(manager_client):
+def test_me_restores_session_from_access_cookie_and_logout_invalidates_it(manager_client):
     response = manager_client.get('/api/auth/me')
     assert response.status_code == 200
     assert response.get_json()['user']['role'] == 'manager'
 
     csrf = manager_client.get_cookie('occupie_csrf_access').value
-    refresh_cookie = manager_client.get_cookie('occupie_refresh').value
-    refresh_csrf = manager_client.get_cookie('occupie_csrf_refresh').value
     logged_out = manager_client.post('/api/auth/logout', headers={'X-CSRF-TOKEN': csrf})
     assert logged_out.status_code == 200
     assert manager_client.get('/api/auth/me').status_code == 401
-    manager_client.set_cookie('occupie_refresh', refresh_cookie)
-    manager_client.set_cookie('occupie_csrf_refresh', refresh_csrf)
-    assert manager_client.post('/api/auth/refresh', headers={'X-CSRF-TOKEN': refresh_csrf}).status_code == 401
+    assert manager_client.get_cookie('occupie_access') is None
 
 
 def test_logout_requires_csrf_protection(manager_client):
@@ -77,8 +71,6 @@ def test_logout_requires_csrf_protection(manager_client):
 
 
 def test_logout_still_revokes_session_when_access_cookie_has_expired(manager_client, app):
-    refresh_cookie = manager_client.get_cookie('occupie_refresh').value
-    refresh_csrf = manager_client.get_cookie('occupie_csrf_refresh').value
     with app.app_context():
         user = User.query.filter_by(email='manager@test.local').one()
         expired_access = create_access_token(
@@ -92,52 +84,36 @@ def test_logout_still_revokes_session_when_access_cookie_has_expired(manager_cli
 
     response = manager_client.post('/api/auth/logout', headers={'X-CSRF-TOKEN': expired_csrf})
     assert response.status_code == 200
-    manager_client.set_cookie('occupie_refresh', refresh_cookie)
-    manager_client.set_cookie('occupie_csrf_refresh', refresh_csrf)
-    assert manager_client.post('/api/auth/refresh', headers={'X-CSRF-TOKEN': refresh_csrf}).status_code == 401
+    assert manager_client.get('/api/auth/me').status_code == 401
 
 
-def test_password_reset_uses_expiring_one_time_token(client, app):
+def test_invalid_login_is_rejected(client):
     register(client)
-    forgot = client.post('/api/auth/forgot-password', json={'email': 'test@example.com'})
-    assert forgot.status_code == 200
-    assert forgot.get_json()['message'] == client.post(
-        '/api/auth/forgot-password', json={'email': 'missing@example.com'},
-    ).get_json()['message']
-    token = parse_qs(urlparse(forgot.get_json()['developmentResetUrl']).query)['token'][0]
-    with app.app_context():
-        user = User.query.filter_by(email='test@example.com').one()
-        assert user.password_reset_token_hash == _token_hash(token)
-        assert user.password_reset_token_hash != token
-    reset = client.post('/api/auth/reset-password', json={'token': token, 'password': 'another-secure-password'})
-    assert reset.status_code == 200
-    assert client.post('/api/auth/reset-password', json={'token': token, 'password': 'third-secure-password'}).status_code == 400
-    assert client.post('/api/auth/login', json={'email': 'test@example.com', 'password': 'another-secure-password'}).status_code == 200
+    assert client.post('/api/auth/login', json={
+        'email': 'test@example.com', 'password': 'wrong-password',
+    }).status_code == 401
 
 
-def test_password_reset_link_is_not_returned_outside_development(client, app):
-    register(client)
-    old_testing = app.config['TESTING']
-    app.config['APP_ENV'] = 'production'
-    app.config['TESTING'] = False
-    try:
-        response = client.post('/api/auth/forgot-password', json={'email': 'test@example.com'})
-    finally:
-        app.config['APP_ENV'] = 'development'
-        app.config['TESTING'] = old_testing
+def test_removed_recovery_and_refresh_endpoints_are_not_registered(client):
+    for endpoint, payload in (
+        ('/api/auth/verify', {'token': 'legacy'}),
+        ('/api/auth/resend-verification', {'email': 'test@example.com'}),
+        ('/api/auth/refresh', {}),
+        ('/api/auth/forgot-password', {'email': 'test@example.com'}),
+        ('/api/auth/reset-password', {'token': 'legacy', 'password': 'a-secure-test-password'}),
+    ):
+        assert client.post(endpoint, json=payload).status_code == 404
+
+
+def test_local_frontend_cors_preflight_is_allowed(client):
+    response = client.options('/api/auth/login', headers={
+        'Origin': 'http://localhost:5173',
+        'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'content-type,x-csrf-token',
+    })
     assert response.status_code == 200
-    assert 'developmentResetUrl' not in response.get_json()
-
-
-def test_expired_verification_token_is_rejected(client, app):
-    register(client)
-    token = 'legacy-verification-token'
-    with app.app_context():
-        user = User.query.filter_by(email='test@example.com').one()
-        user.verification_token_hash = _token_hash(token)
-        user.verification_expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
-        db.session.commit()
-    assert client.post('/api/auth/verify', json={'token': token}).status_code == 400
+    assert response.headers['Access-Control-Allow-Origin'] == 'http://localhost:5173'
+    assert response.headers['Access-Control-Allow-Credentials'] == 'true'
 
 
 def test_customer_cannot_access_staff_mutations(customer_client):

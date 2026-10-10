@@ -85,17 +85,18 @@ export function FloorStaffDashboard() {
         </div>
       </div>
 
-      <OperationalDataStatus loading={loading} error={error} onRetry={refresh} />
-
-      {lastAction && (
-        <div className="p-3 rounded-xl bg-slate-900 text-white text-xs font-medium flex items-center justify-between shadow-md">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-occupie-teal-400" />
-            <span>{lastAction}</span>
+      <div id="service-updates" className="scroll-mt-24">
+        <OperationalDataStatus loading={loading} error={error} onRetry={refresh} />
+        {lastAction && (
+          <div className="mt-3 p-3 rounded-xl bg-slate-900 text-white text-xs font-medium flex items-center justify-between shadow-md">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-occupie-teal-400" />
+              <span>{lastAction}</span>
+            </div>
+            <span className="text-[10px] text-slate-400">{demoMode ? 'Demo preview' : 'Restaurant data'}</span>
           </div>
-          <span className="text-[10px] text-slate-400">{demoMode ? 'Demo preview' : 'Restaurant data'}</span>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -123,7 +124,7 @@ export function FloorStaffDashboard() {
       </div>
 
       {/* Table Cards Grid with Fast Status Action Buttons */}
-      <Card id="tables" className="scroll-mt-24">
+      <Card id="assigned-tables" className="scroll-mt-24">
         <CardHeader
           action={
             <span className="text-xs text-slate-500 font-medium">
@@ -139,7 +140,7 @@ export function FloorStaffDashboard() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div id="table-status" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 scroll-mt-24">
             {displayedTables.map((table) => {
               const statusMeta = TABLE_STATUS_CONFIG[table.status] || TABLE_STATUS_CONFIG.available;
 

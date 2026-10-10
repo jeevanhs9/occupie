@@ -76,20 +76,25 @@ export const TABLE_STATUS_CONFIG = {
 
 export const ROLE_NAVIGATION = {
   [ROLES.MANAGER]: [
-    { label: 'Overview', path: '/dashboard/manager', icon: 'LayoutDashboard' },
-    { label: 'Table Management', path: '/dashboard/manager#tables', icon: 'Grid' },
-    { label: 'Reservations', path: '/dashboard/manager#reservations', icon: 'Calendar' },
-    { label: 'Reports & Alerts', path: '/dashboard/manager#reports', icon: 'BarChart3' },
+    { label: 'Manager Dashboard', path: '/dashboard/manager', icon: 'LayoutDashboard' },
+    { label: 'Table and Section Setup', path: '/dashboard/manager#tables', icon: 'Grid' },
+    { label: 'Reservations Overview', path: '/dashboard/manager#reservations', icon: 'Calendar' },
+    { label: 'Analytics', path: '/dashboard/manager#analytics', icon: 'BarChart3' },
+    { label: 'Shift Reports', path: '/dashboard/manager#shift-report', icon: 'FileSpreadsheet' },
   ],
   [ROLES.HOST]: [
-    { label: 'Host Stand', path: '/dashboard/host', icon: 'CalendarCheck' },
+    { label: 'Host Dashboard', path: '/dashboard/host', icon: 'CalendarCheck' },
     { label: 'Reservations', path: '/dashboard/host#reservations', icon: 'Clock' },
-    { label: 'Walk-In Waitlist', path: '/dashboard/host#waitlist', icon: 'ListOrdered' },
+    { label: 'Walk-in Queue', path: '/dashboard/host#walk-in-queue', icon: 'Users' },
+    { label: 'Waitlist', path: '/dashboard/host#waitlist', icon: 'ListOrdered' },
     { label: 'Table Availability', path: '/dashboard/host#availability', icon: 'LayoutGrid' },
+    { label: 'Seating Recommendations', path: '/dashboard/host#seating-recommendations', icon: 'Sparkles' },
   ],
   [ROLES.FLOOR_STAFF]: [
-    { label: 'Floor Status', path: '/dashboard/floor-staff', icon: 'Activity' },
-    { label: 'My Assigned Tables', path: '/dashboard/floor-staff#tables', icon: 'Armchair' },
+    { label: 'Floor Staff Dashboard', path: '/dashboard/floor-staff', icon: 'Activity' },
+    { label: 'Assigned Tables', path: '/dashboard/floor-staff#assigned-tables', icon: 'Armchair' },
+    { label: 'Table Status', path: '/dashboard/floor-staff#table-status', icon: 'CheckCircle' },
+    { label: 'Service Updates', path: '/dashboard/floor-staff#service-updates', icon: 'Activity' },
   ],
   [ROLES.CUSTOMER]: [
     { label: 'My Dining Hub', path: '/dashboard/customer', icon: 'Utensils' },

@@ -1,5 +1,7 @@
 # Occupie API Contract
 
+> **Legacy reference:** the current registered routes and code-verified request/response shapes are documented in [api-contract.md](api-contract.md). This older document contains stale claims, including that email verification is required before login. Use the linked audited contract for current behavior; this file is retained for existing links.
+
 Operations base URL: `http://localhost:5000/api/v1`
 
 Authentication base URL: `http://localhost:5000/api/auth`

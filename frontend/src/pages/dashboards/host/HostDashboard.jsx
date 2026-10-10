@@ -324,7 +324,7 @@ export function HostDashboard() {
         </div>
       )}
 
-      <section aria-label="Table availability" className="host-dashboard__availability">
+      <section id="availability" aria-label="Table availability" className="host-dashboard__availability scroll-mt-24">
         <div className="host-dashboard__section-heading">
           <div>
             <p className="host-dashboard__eyebrow">The floor</p>
@@ -428,6 +428,7 @@ export function HostDashboard() {
               <CardTitle>Walk-in waitlist</CardTitle>
               <CardDescription>Oldest arrival with a suitable open table is next to seat.</CardDescription>
             </CardHeader>
+            <div id="walk-in-queue" className="scroll-mt-24">
             <CardContent className="p-0">
               {orderedWalkIns.length ? (
                 <ol className="divide-y divide-stone-200/80">
@@ -514,9 +515,10 @@ export function HostDashboard() {
                 <EmptyState title={loading ? 'Loading waitlist' : error ? 'Waitlist unavailable' : 'The waitlist is clear'} description={loading ? 'Arrivals are being refreshed.' : error ? 'Retry the data request to load current arrivals.' : 'Register a walk-in party to begin an arrival-ordered queue.'} actionLabel={!loading && !error ? 'Add a walk-in' : undefined} onAction={() => setShowWalkInForm(true)} />
               )}
             </CardContent>
+            </div>
           </Card>
 
-          <Card className="host-dashboard__rule-panel">
+          <Card id="seating-recommendations" className="host-dashboard__rule-panel scroll-mt-24">
             <CardContent className="p-5 sm:p-6">
               <div className="host-dashboard__rule-heading"><Sparkles aria-hidden="true" /><span>How seating is suggested</span></div>
               <p>Occupie checks current table availability, party capacity, and nearby confirmed reservation holds, then prefers the smallest suitable table. The server revalidates before seating. Occupied-table turnover and future wait times are not predicted.</p>

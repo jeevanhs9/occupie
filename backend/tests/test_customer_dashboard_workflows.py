@@ -63,7 +63,6 @@ def test_customer_waitlist_is_private_ordered_and_cancellable(
 
     with app.app_context():
         other = User(name='Another Customer', email='another-customer@test.local', password='a-secure-test-password')
-        other.email_verified_at = datetime.now(timezone.utc)
         db.session.add(other)
         db.session.commit()
     another_customer = app.test_client()

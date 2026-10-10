@@ -25,6 +25,22 @@ describe('central API client', () => {
 
     expect(result.success).toBe(false);
     expect(result.isNetworkError).toBe(true);
-    expect(result.error).toBe('offline');
+    expect(result.error).toContain('Could not connect to the Occupie API');
+    expect(result.cause).toBe('offline');
+  });
+
+  it('does not retry operational 401 responses through a refresh endpoint', async () => {
+    const fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({ message: 'Sign in to continue.' }),
+    });
+    vi.stubGlobal('fetch', fetch);
+
+    const result = await apiService.tables.list();
+
+    expect(result.status).toBe(401);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0][0]).toMatch(/\/api\/v1\/tables$/);
   });
 });

@@ -1,6 +1,5 @@
 import logging
 import os
-from datetime import datetime, timezone
 from getpass import getpass
 from flask import Flask, jsonify
 from flask_cors import CORS
@@ -25,8 +24,6 @@ def create_app(config_class=Config):
             app.config['COOKIE_SECURE'] = os.environ.get('COOKIE_SECURE', 'false').lower() == 'true'
             app.config['JWT_COOKIE_SECURE'] = app.config['COOKIE_SECURE']
             app.config['RATELIMIT_STORAGE_URI'] = os.environ.get('RATELIMIT_STORAGE_URI', 'memory://')
-            app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER')
-            app.config['MAIL_FROM'] = os.environ.get('MAIL_FROM', 'no-reply@occupie.local')
     else:
         app.config.from_object(config_class)
 
@@ -58,9 +55,6 @@ def create_app(config_class=Config):
             raise RuntimeError('Production configuration requires COOKIE_SECURE=true')
         if not app.config.get('RATELIMIT_STORAGE_URI', '').startswith(('redis://', 'rediss://')):
             raise RuntimeError('Production configuration requires shared Redis RATELIMIT_STORAGE_URI')
-        mail_from = app.config.get('MAIL_FROM', '')
-        if not app.config.get('MAIL_SERVER') or not mail_from or any(marker in mail_from.lower() for marker in ('.local', 'example')):
-            raise RuntimeError('Production configuration requires SMTP MAIL_SERVER and a verified MAIL_FROM address')
 
     # Initialize extensions
     CORS(
@@ -146,7 +140,6 @@ def create_app(config_class=Config):
         if user:
             raise click.ClickException('That email address already has an account.')
         user = User(name=name, email=email, role=role, password=password)
-        user.email_verified_at = datetime.now(timezone.utc)
         selected_restaurant = restaurant_id or app.config['DEFAULT_RESTAURANT_ID']
         restaurant = db.session.get(Restaurant, selected_restaurant)
         if not restaurant and not restaurant_id:

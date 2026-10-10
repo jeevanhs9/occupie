@@ -220,6 +220,7 @@ export function ManagerDashboard() {
             Seating Rules
           </Button>
           <Button
+            id="shift-report"
             size="sm"
             variant="accent"
             onClick={exportShiftReport}
@@ -378,7 +379,7 @@ export function ManagerDashboard() {
       ) : (
         <>
           {/* Royal KPI Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div id="analytics" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 scroll-mt-24">
             <RoyalKPICard
               title="Occupancy Snapshot"
               value={`${occupancyRate}%`}

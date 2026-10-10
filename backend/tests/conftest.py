@@ -1,5 +1,4 @@
 import pytest
-from datetime import datetime, timezone
 from app import create_app
 from app.config import TestConfig
 from app.extensions import db
@@ -28,7 +27,6 @@ def client(app):
 @pytest.fixture
 def manager_client(app):
     user = User(name='Test Manager', email='manager@test.local', role='manager', password='a-secure-test-password')
-    user.email_verified_at = datetime.now(timezone.utc)
     db.session.add(user)
     db.session.flush()
     db.session.add(RestaurantMembership(user_id=user.id, restaurant_id='default', role='manager'))
@@ -44,7 +42,6 @@ def manager_client(app):
 @pytest.fixture
 def customer_client(app):
     user = User(name='Test Customer', email='customer@test.local', password='a-secure-test-password')
-    user.email_verified_at = datetime.now(timezone.utc)
     db.session.add(user)
     db.session.commit()
     client = app.test_client()
@@ -60,7 +57,6 @@ def staff_client_factory(app):
     def create(role, email=None):
         email = email or f'{role}@test.local'
         user = User(name=f'Test {role}', email=email, role=role, password='a-secure-test-password')
-        user.email_verified_at = datetime.now(timezone.utc)
         db.session.add(user)
         db.session.flush()
         db.session.add(RestaurantMembership(user_id=user.id, restaurant_id='default', role=role))
