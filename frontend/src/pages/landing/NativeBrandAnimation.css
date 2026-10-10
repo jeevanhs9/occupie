@@ -1,0 +1,230 @@
+/* Native SVG Brand Animation Styles */
+
+.native-brand-animation {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+}
+
+.native-brand-svg {
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  display: block;
+}
+
+/* Respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .native-brand-animation * {
+    animation: none !important;
+    transition: none !important;
+  }
+  
+  .native-brand-animation .starfield,
+  .native-brand-animation .logo-mark,
+  .native-brand-animation .brand-text {
+    opacity: 1 !important;
+  }
+}
+
+/* Default state - hidden before animation */
+.native-brand-animation:not([data-animated="true"]) .starfield,
+.native-brand-animation:not([data-animated="true"]) .logo-mark,
+.native-brand-animation:not([data-animated="true"]) .brand-text,
+.native-brand-animation:not([data-animated="true"]) .seat-highlights {
+  opacity: 1;
+}
+
+/* === STAGE A: STARFIELD REVEAL === */
+.native-brand-animation[data-animated="true"] .star {
+  opacity: 0;
+  animation: starAppear 0.6s ease-out forwards;
+}
+
+.native-brand-animation[data-animated="true"] .star-1 { animation-delay: 0.2s; }
+.native-brand-animation[data-animated="true"] .star-2 { animation-delay: 0.35s; }
+.native-brand-animation[data-animated="true"] .star-3 { animation-delay: 0.5s; }
+.native-brand-animation[data-animated="true"] .star-4 { animation-delay: 0.65s; }
+.native-brand-animation[data-animated="true"] .star-5 { animation-delay: 0.4s; }
+
+@keyframes starAppear {
+  0% {
+    opacity: 0;
+    transform: scale(0);
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+}
+
+/* === STAGE B & C: LOGO MARK ASSEMBLY === */
+.native-brand-animation[data-animated="true"] .center-table {
+  opacity: 0;
+  transform: scale(0);
+  animation: centerTableAppear 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  animation-delay: 0.8s;
+}
+
+@keyframes centerTableAppear {
+  0% {
+    opacity: 0;
+    transform: scale(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Seats animate in from their positions */
+.native-brand-animation[data-animated="true"] .seat {
+  opacity: 0;
+  animation: seatSlideIn 0.7s cubic-bezier(0.34, 1.26, 0.64, 1) forwards;
+}
+
+.native-brand-animation[data-animated="true"] .seat-top-left {
+  animation-delay: 1.1s;
+  transform-origin: -14.7px -14.7px;
+}
+
+.native-brand-animation[data-animated="true"] .seat-top-right {
+  animation-delay: 1.25s;
+  transform-origin: 14.7px -14.7px;
+}
+
+.native-brand-animation[data-animated="true"] .seat-bottom-left {
+  animation-delay: 1.4s;
+  transform-origin: -14.7px 14.7px;
+}
+
+.native-brand-animation[data-animated="true"] .seat-bottom-right {
+  animation-delay: 1.55s;
+  transform-origin: 14.7px 14.7px;
+}
+
+@keyframes seatSlideIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.3) translateY(-20px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* === STAGE D: LIGHT SWEEP === */
+.native-brand-animation[data-animated="true"] .light-sweep {
+  animation: lightSweepMove 1.2s ease-in-out forwards;
+  animation-delay: 2.3s;
+}
+
+@keyframes lightSweepMove {
+  0% {
+    opacity: 0;
+    transform: translateX(-60px);
+  }
+  30% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(60px);
+  }
+}
+
+/* === STAGE E: SEAT INTERACTION SEQUENCE === */
+.native-brand-animation[data-animated="true"] .highlight {
+  animation: seatPulse 0.6s ease-out forwards;
+}
+
+.native-brand-animation[data-animated="true"] .highlight-1 { animation-delay: 3.6s; }
+.native-brand-animation[data-animated="true"] .highlight-2 { animation-delay: 3.8s; }
+.native-brand-animation[data-animated="true"] .highlight-3 { animation-delay: 4.0s; }
+.native-brand-animation[data-animated="true"] .highlight-4 { animation-delay: 4.2s; }
+
+@keyframes seatPulse {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  40% {
+    opacity: 0.8;
+    transform: scale(1.1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.3);
+  }
+}
+
+/* Add subtle glow to occupied seat after its highlight */
+.native-brand-animation[data-animated="true"] .seat-circle-occupied {
+  filter: url(#accentGlow);
+  animation: occupiedGlow 2s ease-in-out infinite;
+  animation-delay: 4.5s;
+}
+
+@keyframes occupiedGlow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+/* === STAGE F: TYPOGRAPHY REVEAL === */
+.native-brand-animation[data-animated="true"] .brand-text {
+  opacity: 0;
+  animation: textFadeIn 1s ease-out forwards;
+  animation-delay: 2.0s;
+}
+
+@keyframes textFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Subtle warm glow on logo mark after assembly */
+.native-brand-animation[data-animated="true"] .logo-mark {
+  filter: url(#warmGlow);
+  animation: logoWarmth 3s ease-in-out forwards;
+  animation-delay: 2.5s;
+}
+
+@keyframes logoWarmth {
+  0% {
+    filter: url(#warmGlow) brightness(1);
+  }
+  50% {
+    filter: url(#warmGlow) brightness(1.08);
+  }
+  100% {
+    filter: url(#warmGlow) brightness(1);
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .native-brand-svg {
+    max-height: 100%;
+  }
+}
