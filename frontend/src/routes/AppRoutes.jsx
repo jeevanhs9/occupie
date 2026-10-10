@@ -46,6 +46,9 @@ export function AppRoutes() {
         <Route path="host" element={<DashboardAccess role="host"><HostDashboard /></DashboardAccess>} />
         <Route path="floor-staff" element={<DashboardAccess role="floor_staff"><FloorStaffDashboard /></DashboardAccess>} />
         <Route path="customer" element={<DashboardAccess role="customer"><CustomerDashboard /></DashboardAccess>} />
+        <Route path="customer/book" element={<DashboardAccess role="customer"><CustomerDashboard page="booking" /></DashboardAccess>} />
+        <Route path="customer/upcoming" element={<DashboardAccess role="customer"><CustomerDashboard page="upcoming" /></DashboardAccess>} />
+        <Route path="customer/history" element={<DashboardAccess role="customer"><CustomerDashboard page="history" /></DashboardAccess>} />
       </Route>
 
       {/* Fallback */}

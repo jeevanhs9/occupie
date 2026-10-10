@@ -68,6 +68,16 @@
 
 .customer-welcome__copy { max-width: 35rem; margin: .85rem 0 0; color: rgba(250, 245, 236, .75); font-size: .94rem; line-height: 1.65; }
 .customer-demo-label { display: inline-block; margin-top: 1rem; color: #e7d3a8; font-size: .72rem; letter-spacing: .04em; }
+.customer-welcome__action, .customer-empty__action { display: inline-flex; align-items: center; justify-content: center; gap: .55rem; border-radius: .7rem; background: #d8bd83; padding: .78rem 1.05rem; color: #2b2021; font-size: .84rem; font-weight: 700; text-decoration: none; transition: transform .2s ease, background .2s ease; }
+.customer-welcome__action:hover, .customer-empty__action:hover { transform: translateY(-1px); background: #eed7a3; }
+.customer-welcome__action svg { width: 1rem; height: 1rem; }
+.customer-portal-links { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+.customer-portal-links a { display: flex; align-items: center; gap: .85rem; border: 1px solid var(--customer-line); border-radius: 1rem; background: #fffefa; padding: 1.15rem; color: var(--customer-ink); text-decoration: none; box-shadow: 0 9px 28px rgba(44, 31, 30, .045); transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease; }
+.customer-portal-links a:hover { transform: translateY(-2px); border-color: rgba(164, 132, 80, .55); box-shadow: 0 12px 28px rgba(44, 31, 30, .08); }
+.customer-portal-links > a > svg { width: 1.25rem; height: 1.25rem; flex: 0 0 auto; color: var(--customer-brass); }
+.customer-portal-links span { display: grid; gap: .2rem; min-width: 0; }
+.customer-portal-links strong { font-family: Georgia, 'Times New Roman', serif; font-size: 1rem; font-weight: 500; }
+.customer-portal-links small { color: var(--customer-muted); font-size: .74rem; }
 .customer-section { display: grid; gap: 1rem; }
 .customer-section-heading { display: flex; align-items: center; gap: .85rem; }
 .customer-section-heading__icon, .customer-section-icon {
@@ -179,7 +189,8 @@
 
 @media (max-width: 720px) {
   .customer-welcome { min-height: 0; flex-direction: column; align-items: flex-start; gap: 1.2rem; border-radius: 1.15rem; }
-  .customer-welcome > button { width: 100%; }
+  .customer-welcome__action { width: 100%; }
+  .customer-portal-links { grid-template-columns: 1fr; }
   .customer-welcome__ornament { inset: auto -12rem -15rem auto; }
   .customer-record__body { align-items: flex-start; flex-direction: column; }
   .customer-record__actions { width: 100%; justify-content: flex-start; }

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { PageEntrance } from '../../../components/ui/PageEntrance';
 import { Card, CardContent } from '../../../components/ui/Card';
 import { Badge } from '../../../components/ui/Badge';
@@ -103,7 +104,7 @@ function ReservationCard({ reservation, onStatusChange, pending }) {
   );
 }
 
-export function CustomerDashboard() {
+export function CustomerDashboard({ page = 'hub' }) {
   const { user } = useRole();
   const {
     reservations,
@@ -119,7 +120,7 @@ export function CustomerDashboard() {
     updateWaitlistStatus,
     updateReservationStatus,
   } = useOperationalData();
-  const [showBookingForm, setShowBookingForm] = useState(false);
+  const showBookingForm = page === 'booking';
   const [bookingForm, setBookingForm] = useState(() => {
     const startsAt = new Date();
     startsAt.setHours(startsAt.getHours() + 1, 0, 0, 0);
@@ -139,14 +140,6 @@ export function CustomerDashboard() {
     const interval = window.setInterval(() => { refreshWaitlist(); }, 30_000);
     return () => window.clearInterval(interval);
   }, [demoMode, refreshWaitlist, waitlist.length]);
-
-  useEffect(() => {
-    if (!showBookingForm) return;
-    document.getElementById('customer-booking')?.scrollIntoView?.({
-      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-      block: 'start',
-    });
-  }, [showBookingForm]);
 
   const { upcoming, history } = useMemo(() => {
     const now = Date.now();
@@ -229,7 +222,6 @@ export function CustomerDashboard() {
       : reservation.time;
     setBookingNotice({ type: 'success', message: `Reservation confirmed for ${confirmedTime || formatReservationDate(reservation.startsAt)} at table ${reservation.table}.` });
     setSuggestedTable(null);
-    setShowBookingForm(false);
   };
 
   const handleReservationStatus = async (reservation, status) => {
@@ -284,25 +276,23 @@ export function CustomerDashboard() {
       <section className="customer-welcome" aria-labelledby="customer-welcome-title">
         <div className="customer-welcome__ornament" aria-hidden="true" />
         <div className="customer-welcome__content">
-          <p className="customer-eyebrow">A more considered evening</p>
-          <h1 id="customer-welcome-title">Welcome back, {user?.name || 'Dining Guest'}</h1>
-          <p className="customer-welcome__copy">Plan your visit, keep your reservations close, and arrive ready to enjoy the table.</p>
+          <p className="customer-eyebrow">{page === 'hub' ? 'A more considered evening' : 'Guest portal'}</p>
+          <h1 id="customer-welcome-title">{page === 'hub' ? `Welcome back, ${user?.name || 'Dining Guest'}` : page === 'booking' ? 'Book a table' : page === 'upcoming' ? 'Upcoming bookings' : 'Dining history'}</h1>
+          <p className="customer-welcome__copy">{page === 'hub' ? 'Plan your visit, keep your reservations close, and arrive ready to enjoy the table.' : page === 'booking' ? 'Choose a future date and party size, then we’ll check current availability.' : page === 'upcoming' ? 'Keep your next visits and waitlist status in one place.' : 'Look back at your completed and past reservations.'}</p>
           {demoMode && <span className="customer-demo-label">Preview data · changes are temporary</span>}
         </div>
-        <Button
-          size="lg"
-          variant="accent"
-          icon={Plus}
-          onClick={() => {
-            setShowBookingForm((open) => !open);
-            setBookingNotice(null);
-          }}
-        >
-          {showBookingForm ? 'Close reservation form' : 'Reserve a Table'}
-        </Button>
+        {page === 'hub' && <Link className="customer-welcome__action" to="/dashboard/customer/book"><Plus aria-hidden="true" /> Reserve a Table</Link>}
       </section>
 
       <OperationalDataStatus loading={loading} error={error} onRetry={refresh} />
+
+      {page === 'hub' && (
+        <section className="customer-portal-links" aria-label="Guest portal pages">
+          <Link to="/dashboard/customer/book"><CalendarDays aria-hidden="true" /><span><strong>Book a table</strong><small>Plan your next visit</small></span></Link>
+          <Link to="/dashboard/customer/upcoming"><TicketCheck aria-hidden="true" /><span><strong>Upcoming bookings</strong><small>Review and manage reservations</small></span></Link>
+          <Link to="/dashboard/customer/history"><History aria-hidden="true" /><span><strong>Dining history</strong><small>See your past visits</small></span></Link>
+        </section>
+      )}
 
       {showBookingForm && (
         <Card id="customer-booking" className="customer-panel customer-booking-panel">
@@ -360,7 +350,7 @@ export function CustomerDashboard() {
 
       {bookingNotice && <Notice notice={bookingNotice} onDismiss={() => setBookingNotice(null)} />}
 
-      <section className="customer-section" aria-labelledby="customer-upcoming-title">
+      {page === 'upcoming' && <section className="customer-section" aria-labelledby="customer-upcoming-title">
         <SectionHeading id="customer-upcoming-title" eyebrow="Reserved for you" title="Upcoming reservations" icon={TicketCheck} />
         {loading && reservations.length === 0 ? (
           <LoadingPanel label="Loading your reservations" />
@@ -380,12 +370,12 @@ export function CustomerDashboard() {
             icon={CalendarDays}
             title="No upcoming reservations"
             description="When you reserve a table, the date, time, party details and current status will appear here."
-            action={<Button variant="secondary" onClick={() => setShowBookingForm(true)}>Plan a visit</Button>}
+            action={<Link className="customer-empty__action" to="/dashboard/customer/book">Plan a visit</Link>}
           />
         )}
-      </section>
+      </section>}
 
-      <section className="customer-panel customer-waitlist" aria-labelledby="customer-waitlist-title">
+      {page === 'upcoming' && <section className="customer-panel customer-waitlist" aria-labelledby="customer-waitlist-title">
         <div className="customer-panel__heading customer-panel__heading--spread">
           <span className="customer-section-icon"><Users aria-hidden="true" /></span>
           <div className="customer-panel__title-group">
@@ -434,9 +424,9 @@ export function CustomerDashboard() {
         ) : (
           <p className="customer-waitlist__empty"><span><Check aria-hidden="true" /></span>You’re not currently on the waitlist.</p>
         )}
-      </section>
+      </section>}
 
-      <section className="customer-section customer-history" aria-labelledby="customer-history-title">
+      {page === 'history' && <section className="customer-section customer-history" aria-labelledby="customer-history-title">
         <SectionHeading id="customer-history-title" eyebrow="Your visits" title="Dining history" icon={History} />
         {history.length ? (
           <div className="customer-record-list">
@@ -449,7 +439,7 @@ export function CustomerDashboard() {
             description="Past visits and completed reservations are listed here as they’re returned by the restaurant service."
           />
         )}
-      </section>
+      </section>}
     </PageEntrance>
   );
 }

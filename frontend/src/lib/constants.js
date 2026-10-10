@@ -93,8 +93,8 @@ export const ROLE_NAVIGATION = {
   ],
   [ROLES.CUSTOMER]: [
     { label: 'My Dining Hub', path: '/dashboard/customer', icon: 'Utensils' },
-    { label: 'Book a Table', path: '/dashboard/customer#booking', icon: 'PlusCircle' },
-    { label: 'Upcoming Bookings', path: '/dashboard/customer#upcoming', icon: 'Ticket' },
-    { label: 'Dining History', path: '/dashboard/customer#history', icon: 'History' },
+    { label: 'Book a Table', path: '/dashboard/customer/book', icon: 'PlusCircle' },
+    { label: 'Upcoming Bookings', path: '/dashboard/customer/upcoming', icon: 'Ticket' },
+    { label: 'Dining History', path: '/dashboard/customer/history', icon: 'History' },
   ],
 };
