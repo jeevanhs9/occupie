@@ -22,7 +22,7 @@ class WaitlistEntry(db.Model):
 
     table = db.relationship('RestaurantTable')
 
-    def to_dict(self, now=None):
+    def to_dict(self, now=None, position=None):
         current_time = now or datetime.now(timezone.utc)
         created_at = self.created_at
         if created_at.tzinfo is None:
@@ -36,6 +36,7 @@ class WaitlistEntry(db.Model):
             'status': self.status,
             'waitMinutes': wait_minutes,
             'quotedWait': None,
+            **({'position': position} if position is not None else {}),
             'table': self.table_id,
             'createdAt': created_at.isoformat(),
         }

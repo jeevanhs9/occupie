@@ -1,14 +1,13 @@
-import React from 'react';
-import { NativeBrandAnimation } from './NativeBrandAnimation';
-import './NativeBrandAnimation.css';
+import React, { forwardRef } from 'react';
+import { LogoFrameAnimation } from './LogoFrameAnimation';
+import './LogoFrameAnimation.css';
 
 /**
- * Brand animation integration for the Occupie logo.
- * Now uses native React/SVG animation instead of video.
- * Preserves the same integration boundary for the cinematic scene.
+ * Integration boundary for the supplied Occupie logo sequence. The cinematic
+ * section owns the shared scroll progress; this component only renders frames.
  */
-export function BrandAnimation({ className = '' }) {
-  return <NativeBrandAnimation className={className} />;
-}
+export const BrandAnimation = forwardRef(function BrandAnimation(props, ref) {
+  return <LogoFrameAnimation ref={ref} {...props} />;
+});
 
 export default BrandAnimation;

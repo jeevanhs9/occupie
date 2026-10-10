@@ -31,10 +31,19 @@ export default {
             400: '#d5bf8b',
             500: '#b4945a',
             600: '#927342',
+            700: '#76553e',
           },
           ivory: '#f3eee5',
           cream: '#fbf8f2',
           taupe: '#786e64',
+          sage: {
+            50: '#f5f7f4',
+            100: '#e8ede5',
+            200: '#d1dbcd',
+            300: '#aab78b',
+            400: '#8ea470',
+            500: '#718856',
+          },
           // Compatibility aliases used by the existing app components.
           navy: {
             950: '#110e0e',

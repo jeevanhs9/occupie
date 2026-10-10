@@ -6,13 +6,14 @@ const FRAME_DIRECTORY = '/frames/';
 const DECODED_FRAME_LIMIT = 8;
 
 const NARRATIVE = [
-  { at: 0, eyebrow: 'The arrival', line: 'An exceptional welcome begins before the first course.' },
-  { at: 0.26, eyebrow: 'At the door', line: 'Every arrival deserves the right table.' },
-  { at: 0.55, eyebrow: 'In the room', line: 'Every table. Every moment. Considered.' },
-  { at: 0.8, eyebrow: 'After dark', line: 'Hospitality, intelligently arranged.' },
+  { at: 0, eyebrow: 'The arrival', lines: ['An exceptional welcome', 'begins before the first course.'] },
+  { at: 0.26, eyebrow: 'At the door', lines: ['Every arrival deserves', 'the right table.'] },
+  { at: 0.55, eyebrow: 'In the room', lines: ['Every table. Every moment.', 'Considered.'] },
+  { at: 0.8, eyebrow: 'After dark', lines: ['Hospitality, intelligently', 'arranged.'] },
 ];
 
 const framePath = (index) => `${FRAME_DIRECTORY}frame_${String(index + 1).padStart(4, '0')}.webp`;
+const clamp01 = (value) => Math.max(0, Math.min(1, value));
 
 function narrativeIndexFor(progress) {
   for (let index = NARRATIVE.length - 1; index >= 0; index -= 1) {
@@ -28,7 +29,9 @@ function narrativeIndexFor(progress) {
  */
 export function CinematicScene({ renderScene, playbackEnabled = true }) {
   const sectionRef = useRef(null);
+  const stageRef = useRef(null);
   const canvasRef = useRef(null);
+  const logoAnimationRef = useRef(null);
   const progressRef = useRef(0);
   const requestUpdateRef = useRef(null);
   const narrativeIndexRef = useRef(0);
@@ -38,6 +41,7 @@ export function CinematicScene({ renderScene, playbackEnabled = true }) {
   const [narrativeIndex, setNarrativeIndex] = useState(0);
   const [frameReady, setFrameReady] = useState(false);
   const [frameError, setFrameError] = useState(false);
+  const [logoFrameError, setLogoFrameError] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(() => Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches));
 
   playbackEnabledRef.current = playbackEnabled;
@@ -55,6 +59,7 @@ export function CinematicScene({ renderScene, playbackEnabled = true }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     const section = sectionRef.current;
+    const stage = stageRef.current;
     // jsdom has no canvas implementation; keep component tests on the static poster fallback.
     if (typeof window.CanvasRenderingContext2D === 'undefined') {
       setFrameError(true);
@@ -80,6 +85,7 @@ export function CinematicScene({ renderScene, playbackEnabled = true }) {
     let prefetchUsesTimeout = false;
     let prefetchRunning = false;
     let active = true;
+    let introFrame = null;
     let sourceWidth = 1280;
     let sourceHeight = 720;
 
@@ -234,6 +240,19 @@ export function CinematicScene({ renderScene, playbackEnabled = true }) {
       const travelled = -section.getBoundingClientRect().top;
       const progress = Math.max(0, Math.min(1, travelled / distance));
       progressRef.current = progress;
+
+      // One scroll value drives the scene frame, logo handoff, and copy exit.
+      const logoProgress = reducedMotionRef.current ? 0 : clamp01(progress / 0.34);
+      const logoHandoff = reducedMotionRef.current ? 1 : clamp01((progress - 0.31) / 0.12);
+      const copyExit = reducedMotionRef.current ? 0 : clamp01((progress - 0.82) / 0.17);
+      logoAnimationRef.current?.render(logoProgress);
+      stage?.style.setProperty('--scene-progress', progress.toFixed(4));
+      stage?.style.setProperty('--hero-logo-opacity', String(1 - logoHandoff));
+      stage?.style.setProperty('--hero-logo-scale', String(1 - (logoHandoff * 0.08)));
+      stage?.style.setProperty('--hero-copy-opacity', String(1 - copyExit));
+      stage?.style.setProperty('--hero-copy-offset', `${-12 * copyExit}px`);
+      document.documentElement.style.setProperty('--cinematic-nav-logo-opacity', String(logoHandoff));
+
       const nextNarrativeIndex = narrativeIndexFor(progress);
       if (nextNarrativeIndex !== narrativeIndexRef.current) {
         narrativeIndexRef.current = nextNarrativeIndex;
@@ -282,6 +301,9 @@ export function CinematicScene({ renderScene, playbackEnabled = true }) {
     }
 
     requestUpdateRef.current = requestUpdate;
+    introFrame = window.requestAnimationFrame(() => {
+      stage?.setAttribute('data-intro-ready', 'true');
+    });
     window.addEventListener('scroll', requestUpdate, { passive: true });
     window.addEventListener('resize', requestUpdate, { passive: true });
     requestUpdate();
@@ -291,12 +313,20 @@ export function CinematicScene({ renderScene, playbackEnabled = true }) {
       window.removeEventListener('scroll', requestUpdate);
       window.removeEventListener('resize', requestUpdate);
       if (animationFrame !== null) window.cancelAnimationFrame(animationFrame);
+      if (introFrame !== null) window.cancelAnimationFrame(introFrame);
       cancelPrefetch();
       abortController.abort();
       bitmaps.forEach((bitmap) => bitmap.close?.());
       bitmaps.clear();
       blobs.clear();
       blobRequests.clear();
+      stage?.removeAttribute('data-intro-ready');
+      stage?.style.removeProperty('--scene-progress');
+      stage?.style.removeProperty('--hero-logo-opacity');
+      stage?.style.removeProperty('--hero-logo-scale');
+      stage?.style.removeProperty('--hero-copy-opacity');
+      stage?.style.removeProperty('--hero-copy-offset');
+      document.documentElement.style.removeProperty('--cinematic-nav-logo-opacity');
       requestUpdateRef.current = null;
     };
   }, []);
@@ -309,7 +339,7 @@ export function CinematicScene({ renderScene, playbackEnabled = true }) {
 
   return (
     <section ref={sectionRef} id="experience" className="cinematic-journey" aria-label="A journey through the restaurant">
-      <div className="cinematic-stage">
+      <div ref={stageRef} className="cinematic-stage">
         <div className="cinematic-scene-slot">
           {renderScene ? renderScene({ reducedMotion, playbackEnabled, progressRef }) : (
             <canvas
@@ -320,14 +350,27 @@ export function CinematicScene({ renderScene, playbackEnabled = true }) {
           )}
         </div>
         <div className="cinematic-shade" />
-        <BrandAnimation className="cinematic-brand-animation" />
-        <div className="cinematic-copy" key={narrative.eyebrow}>
-          <p className="eyebrow">{narrative.eyebrow}</p>
-          <h1 className="cinematic-line">{narrative.line}</h1>
-          <p className="cinematic-caption">A considered welcome begins with a clear view of the room.</p>
+        <BrandAnimation
+          ref={logoAnimationRef}
+          className="cinematic-brand-animation"
+          reducedMotion={reducedMotion}
+          onError={() => setLogoFrameError(true)}
+        />
+        <div className="cinematic-copy">
+          <div className="cinematic-copy-inner">
+            <p className="eyebrow">{narrative.eyebrow}</p>
+            <h1 className="cinematic-line">
+              <span className="sr-only">{narrative.lines.join(' ')}</span>
+              <span aria-hidden="true">
+                {narrative.lines.map((line) => <span key={line} className="cinematic-title-line">{line}</span>)}
+              </span>
+            </h1>
+            <p className="cinematic-caption">A considered welcome begins with a clear view of the room.</p>
+          </div>
         </div>
         {!renderScene && !frameReady && !frameError && <p className="video-status" role="status">Preparing the dining room</p>}
         {!renderScene && frameError && <p className="video-status" role="status">Some restaurant frames are unavailable. Showing the nearest available scene.</p>}
+        {logoFrameError && <p className="video-status logo-frame-status" role="status">Some logo animation frames are unavailable.</p>}
         {!renderScene && reducedMotion && <p className="video-status" role="status">Reduced motion is on. The opening scene is held still.</p>}
       </div>
     </section>

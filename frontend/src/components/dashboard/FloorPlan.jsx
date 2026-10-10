@@ -3,7 +3,7 @@ import { Armchair, Clock3, MapPin } from 'lucide-react';
 import { TABLE_STATUS_CONFIG } from '../../lib/constants';
 
 /** A section-grouped service map built only from table fields supplied by Occupie. */
-export function FloorPlan({ tables = [], className = '' }) {
+export function FloorPlan({ tables = [], className = '', onStatusChange = null, isPending = null }) {
   const [selectedId, setSelectedId] = useState(null);
   const selectedTable = tables.find((table) => table.id === selectedId) || tables[0] || null;
   const sections = tables.reduce((grouped, table) => {
@@ -88,7 +88,40 @@ export function FloorPlan({ tables = [], className = '' }) {
                 <div><dt>Seated at</dt><dd><Clock3 size={13} aria-hidden="true" /> {selectedTable.timeSeated}</dd></div>
               )}
             </dl>
-            <p className="floor-plan-detail-note">Status changes are made from the role workflow that owns this table action.</p>
+            
+            {onStatusChange && (
+              <div className="mt-4 space-y-2">
+                <p className="floor-plan-kicker">Change Status</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {['available', 'occupied', 'reserved', 'cleaning'].map((status) => {
+                    const isActive = selectedTable.status === status;
+                    const actionPending = isPending && isPending(selectedTable.id);
+                    return (
+                      <button
+                        key={status}
+                        type="button"
+                        onClick={() => !isActive && onStatusChange(selectedTable.id, status)}
+                        disabled={isActive || actionPending}
+                        className={`px-3 py-2 text-xs font-semibold rounded-lg border transition-colors ${
+                          isActive 
+                            ? 'bg-occupie-burgundy-100 text-occupie-burgundy-700 border-occupie-burgundy-300 cursor-default'
+                            : 'bg-white text-occupie-taupe border-slate-200 hover:bg-occupie-ivory hover:border-occupie-brass-400'
+                        }`}
+                      >
+                        {status}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[11px] text-occupie-taupe/70 mt-2 italic">
+                  Manager can override table status for operational needs.
+                </p>
+              </div>
+            )}
+            
+            {!onStatusChange && (
+              <p className="floor-plan-detail-note">Status changes are made from the role workflow that owns this table action.</p>
+            )}
           </>
         ) : (
           <>

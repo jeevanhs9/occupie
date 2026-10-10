@@ -1,0 +1,641 @@
+/* Royal Manager Dashboard Design System */
+
+/* ===================================
+   TYPOGRAPHY
+   =================================== */
+
+.royal-heading {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 400;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  color: #28151b;
+}
+
+.royal-heading-xl {
+  font-size: clamp(2rem, 4vw, 3rem);
+}
+
+.royal-heading-lg {
+  font-size: clamp(1.5rem, 3vw, 2rem);
+}
+
+.royal-heading-md {
+  font-size: clamp(1.25rem, 2.5vw, 1.5rem);
+}
+
+.royal-label {
+  font-family: 'Plus Jakarta Sans', Inter, sans-serif;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #b4945a;
+}
+
+.royal-body {
+  font-family: 'Plus Jakarta Sans', Inter, sans-serif;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: #332226;
+}
+
+/* ===================================
+   CARDS & CONTAINERS
+   =================================== */
+
+.royal-card {
+  background: #fbf8f2;
+  border: 1px solid rgba(180, 148, 90, 0.15);
+  border-radius: 0.85rem;
+  box-shadow: 0 2px 10px -4px rgba(37, 29, 18, 0.08), 0 1px 3px rgba(37, 29, 18, 0.03);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.royal-card:hover {
+  border-color: rgba(180, 148, 90, 0.25);
+  box-shadow: 0 8px 22px -8px rgba(37, 29, 18, 0.12), 0 2px 5px rgba(37, 29, 18, 0.04);
+  transform: translateY(-1px);
+}
+
+.royal-card-dark {
+  background: linear-gradient(135deg, #191315 0%, #28151b 100%);
+  border: 1px solid rgba(180, 148, 90, 0.2);
+  color: #f3eee5;
+}
+
+.royal-card-emphasis {
+  background: linear-gradient(135deg, #672b3c 0%, #48222e 100%);
+  border: 1px solid rgba(213, 191, 139, 0.3);
+  color: #f3eee5;
+}
+
+/* ===================================
+   KPI CARDS
+   =================================== */
+
+.royal-kpi-card {
+  background: #ffffff;
+  border: 1px solid rgba(120, 110, 100, 0.12);
+  border-radius: 0.85rem;
+  padding: 1.5rem;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.royal-kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #b4945a, #d5bf8b);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.royal-kpi-card:hover::before {
+  opacity: 1;
+}
+
+.royal-kpi-card:hover {
+  border-color: rgba(180, 148, 90, 0.25);
+  box-shadow: 0 12px 28px -12px rgba(103, 43, 60, 0.15), 0 3px 8px rgba(37, 29, 18, 0.05);
+  transform: translateY(-2px);
+}
+
+.royal-kpi-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #786e64;
+  margin-bottom: 0.5rem;
+}
+
+.royal-kpi-value {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 2.25rem;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: #28151b;
+  line-height: 1;
+  margin-bottom: 0.5rem;
+}
+
+.royal-kpi-subtitle {
+  font-size: 0.75rem;
+  color: #60464c;
+  line-height: 1.4;
+}
+
+.royal-kpi-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.375rem;
+  margin-top: 0.5rem;
+}
+
+.royal-kpi-trend.up {
+  background: rgba(170, 183, 139, 0.12);
+  color: #718856;
+}
+
+.royal-kpi-trend.down {
+  background: rgba(251, 191, 36, 0.12);
+  color: #D97706;
+}
+
+.royal-kpi-trend.neutral {
+  background: rgba(180, 148, 90, 0.12);
+  color: #927342;
+}
+
+/* ===================================
+   BUTTONS
+   =================================== */
+
+.royal-button {
+  font-family: 'Plus Jakarta Sans', Inter, sans-serif;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 0.625rem 1.25rem;
+  border-radius: 0.5rem;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.royal-button-primary {
+  background: linear-gradient(135deg, #b4945a 0%, #927342 100%);
+  color: #ffffff;
+  border-color: #927342;
+}
+
+.royal-button-primary:hover {
+  background: linear-gradient(135deg, #d5bf8b 0%, #b4945a 100%);
+  border-color: #b4945a;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px -4px rgba(180, 148, 90, 0.4);
+}
+
+.royal-button-primary:active {
+  transform: translateY(0);
+}
+
+.royal-button-secondary {
+  background: #f3eee5;
+  color: #332226;
+  border-color: rgba(120, 110, 100, 0.2);
+}
+
+.royal-button-secondary:hover {
+  background: #e2d1aa;
+  border-color: #b4945a;
+}
+
+.royal-button-outline {
+  background: transparent;
+  color: #332226;
+  border-color: rgba(120, 110, 100, 0.25);
+}
+
+.royal-button-outline:hover {
+  background: rgba(180, 148, 90, 0.08);
+  border-color: #b4945a;
+}
+
+.royal-button-ghost {
+  background: transparent;
+  color: #786e64;
+  border-color: transparent;
+}
+
+.royal-button-ghost:hover {
+  background: rgba(180, 148, 90, 0.08);
+  color: #332226;
+}
+
+.royal-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* ===================================
+   OPERATIONS PANELS
+   =================================== */
+
+.royal-operations-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin: 2rem 0;
+}
+
+@media (max-width: 1024px) {
+  .royal-operations-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.royal-panel {
+  background: #ffffff;
+  border: 1px solid rgba(120, 110, 100, 0.12);
+  border-radius: 0.85rem;
+  padding: 1.5rem;
+  position: relative;
+}
+
+.royal-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(120, 110, 100, 0.08);
+}
+
+.royal-panel-title {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.125rem;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: #28151b;
+}
+
+.royal-panel-kicker {
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #b4945a;
+  margin-bottom: 0.375rem;
+}
+
+.royal-panel-badge {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 0.25rem 0.625rem;
+  border-radius: 0.375rem;
+  background: rgba(180, 148, 90, 0.12);
+  color: #76553e;
+}
+
+.royal-panel-empty {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: #786e64;
+  font-size: 0.875rem;
+  font-style: italic;
+}
+
+/* ===================================
+   WAITLIST
+   =================================== */
+
+.royal-waitlist {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.royal-waitlist-entry {
+  display: grid;
+  grid-template-columns: 2rem 1fr auto auto;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 0.875rem;
+  background: rgba(180, 148, 90, 0.03);
+  border: 1px solid rgba(120, 110, 100, 0.1);
+  border-radius: 0.55rem;
+  transition: all 0.2s ease;
+}
+
+.royal-waitlist-entry:hover {
+  background: rgba(180, 148, 90, 0.06);
+  border-color: rgba(180, 148, 90, 0.2);
+}
+
+.royal-waitlist-position {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #b4945a;
+  text-align: center;
+}
+
+.royal-waitlist-name {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #28151b;
+}
+
+.royal-waitlist-size {
+  font-size: 0.75rem;
+  color: #786e64;
+  display: block;
+  margin-top: 0.125rem;
+}
+
+.royal-waitlist-status {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.375rem;
+  background: rgba(170, 183, 139, 0.15);
+  color: #718856;
+}
+
+.royal-waitlist-wait {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #60464c;
+  white-space: nowrap;
+}
+
+/* ===================================
+   RECOMMENDATION PANEL
+   =================================== */
+
+.royal-recommendation {
+  background: linear-gradient(135deg, #fbf8f2 0%, #f7f0f1 100%);
+  border: 1px solid rgba(180, 148, 90, 0.2);
+  border-radius: 0.85rem;
+  padding: 1.5rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.royal-recommendation::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 120px;
+  height: 120px;
+  background: radial-gradient(circle, rgba(180, 148, 90, 0.08) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.royal-recommendation-mark {
+  font-size: 1.5rem;
+  color: #d5bf8b;
+  opacity: 0.4;
+}
+
+.royal-recommendation-party {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.125rem;
+  font-weight: 400;
+  color: #28151b;
+  margin-bottom: 0.75rem;
+}
+
+.royal-recommendation-table {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: #672b3c;
+  margin-bottom: 0.25rem;
+}
+
+.royal-recommendation-details {
+  font-size: 0.8125rem;
+  color: #60464c;
+  margin-bottom: 0.75rem;
+}
+
+.royal-recommendation-reason {
+  font-size: 0.75rem;
+  color: #786e64;
+  font-style: italic;
+  line-height: 1.5;
+}
+
+.royal-recommendation-note {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(120, 110, 100, 0.12);
+  font-size: 0.6875rem;
+  color: #927342;
+  font-style: italic;
+}
+
+/* ===================================
+   FLOOR PLAN
+   =================================== */
+
+.royal-floor-container {
+  background: #ffffff;
+  border: 1px solid rgba(120, 110, 100, 0.12);
+  border-radius: 0.85rem;
+  padding: 1.5rem;
+}
+
+.royal-floor-filters {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+
+.royal-filter-button {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.5rem 0.875rem;
+  border-radius: 0.5rem;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  text-transform: capitalize;
+}
+
+.royal-filter-button:not(.active) {
+  background: rgba(120, 110, 100, 0.06);
+  color: #60464c;
+  border-color: transparent;
+}
+
+.royal-filter-button:not(.active):hover {
+  background: rgba(180, 148, 90, 0.12);
+  border-color: rgba(180, 148, 90, 0.2);
+}
+
+.royal-filter-button.active {
+  background: linear-gradient(135deg, #28151b 0%, #48222e 100%);
+  color: #f3eee5;
+  border-color: #672b3c;
+}
+
+/* ===================================
+   ALERTS & NOTIFICATIONS
+   =================================== */
+
+.royal-alert {
+  border-radius: 0.7rem;
+  padding: 0.875rem 1rem;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  border: 1px solid;
+}
+
+.royal-alert-info {
+  background: rgba(170, 183, 139, 0.08);
+  border-color: rgba(170, 183, 139, 0.2);
+  color: #493138;
+}
+
+.royal-alert-warning {
+  background: rgba(251, 191, 36, 0.08);
+  border-color: rgba(251, 191, 36, 0.2);
+  color: #76553e;
+}
+
+.royal-alert-success {
+  background: rgba(170, 183, 139, 0.12);
+  border-color: rgba(170, 183, 139, 0.25);
+  color: #718856;
+}
+
+.royal-alert-error {
+  background: rgba(103, 43, 60, 0.08);
+  border-color: rgba(103, 43, 60, 0.2);
+  color: #672b3c;
+}
+
+/* ===================================
+   ANIMATIONS
+   =================================== */
+
+@keyframes royal-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes royal-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes royal-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes royal-glow {
+  0%, 100% {
+    box-shadow: 0 2px 12px -4px rgba(180, 148, 90, 0.2);
+  }
+  50% {
+    box-shadow: 0 4px 20px -6px rgba(180, 148, 90, 0.35);
+  }
+}
+
+.royal-animate-fade-in {
+  animation: royal-fade-in 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.royal-animate-slide-in {
+  animation: royal-slide-in 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.royal-animate-scale-in {
+  animation: royal-scale-in 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* Stagger delays for sequential animations */
+.royal-stagger-1 { animation-delay: 0.05s; }
+.royal-stagger-2 { animation-delay: 0.1s; }
+.royal-stagger-3 { animation-delay: 0.15s; }
+.royal-stagger-4 { animation-delay: 0.2s; }
+.royal-stagger-5 { animation-delay: 0.25s; }
+.royal-stagger-6 { animation-delay: 0.3s; }
+
+/* ===================================
+   RESPONSIVE
+   =================================== */
+
+@media (max-width: 768px) {
+  .royal-kpi-value {
+    font-size: 1.75rem;
+  }
+
+  .royal-heading-xl {
+    font-size: 1.75rem;
+  }
+
+  .royal-panel {
+    padding: 1.25rem;
+  }
+
+  .royal-waitlist-entry {
+    grid-template-columns: 1.75rem 1fr auto;
+    gap: 0.625rem;
+  }
+
+  .royal-waitlist-wait {
+    grid-column: 2 / 3;
+    margin-top: 0.25rem;
+  }
+}
+
+/* ===================================
+   ACCESSIBILITY
+   =================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .royal-card:hover,
+  .royal-kpi-card:hover,
+  .royal-button:hover {
+    transform: none !important;
+  }
+}
+
+/* Focus states for keyboard navigation */
+.royal-button:focus-visible,
+.royal-filter-button:focus-visible {
+  outline: 2px solid #b4945a;
+  outline-offset: 2px;
+}
+
+.royal-waitlist-entry:focus-within {
+  outline: 2px solid #b4945a;
+  outline-offset: 2px;
+  border-radius: 0.55rem;
+}

@@ -55,7 +55,12 @@ def require_role_and_restaurant():
             {'manager', 'host', 'customer'}
         )
     elif path.startswith('/waitlist'):
-        allowed = {'manager', 'host', 'floor_staff', 'customer'} if request.method == 'GET' else {'manager', 'host'}
+        if request.method == 'GET':
+            allowed = {'manager', 'host', 'floor_staff', 'customer'}
+        elif path == '/waitlist' or (request.method == 'PATCH' and path.count('/') == 2):
+            allowed = {'manager', 'host', 'customer'}
+        else:
+            allowed = {'manager', 'host'}
     elif path.startswith('/allocations'):
         allowed = {'manager', 'host', 'floor_staff', 'customer'}
     else:
@@ -404,7 +409,21 @@ def update_reservation_status(reservation_id):
 def waitlist_collection():
     if request.method == 'GET':
         if g.occupie_role == 'customer':
-            return jsonify({'waitlist': []}), 200
+            customer_entries = WaitlistEntry.query.filter(
+                WaitlistEntry.restaurant_id == g.restaurant_id,
+                WaitlistEntry.created_by_id == g.occupie_user.id,
+                WaitlistEntry.status.in_(('waiting', 'ready')),
+            ).order_by(WaitlistEntry.created_at, WaitlistEntry.id).all()
+            customer_rows = []
+            for entry in customer_entries:
+                position = WaitlistEntry.query.filter(
+                    WaitlistEntry.restaurant_id == g.restaurant_id,
+                    WaitlistEntry.status.in_(('waiting', 'ready')),
+                    (WaitlistEntry.created_at < entry.created_at)
+                    | ((WaitlistEntry.created_at == entry.created_at) & (WaitlistEntry.id <= entry.id)),
+                ).count()
+                customer_rows.append(entry.to_dict(position=position))
+            return jsonify({'waitlist': customer_rows}), 200
         entries = WaitlistEntry.query.filter(
             WaitlistEntry.restaurant_id == g.restaurant_id,
             WaitlistEntry.status.in_(('waiting', 'ready')),
@@ -416,6 +435,8 @@ def waitlist_collection():
         return error
     party_name = payload.get('partyName')
     party_size = payload.get('partySize')
+    if g.occupie_role == 'customer':
+        party_name = g.occupie_user.name
     if not isinstance(party_name, str) or not party_name.strip():
         return _error('partyName is required.', 422, {'partyName': 'Required.'})
     if len(party_name.strip()) > 120:
@@ -425,6 +446,13 @@ def waitlist_collection():
     contact = payload.get('contact')
     if contact is not None and (not isinstance(contact, str) or len(contact) > 40):
         return _error('contact must be a string of 40 characters or fewer.', 422, {'contact': 'Invalid value.'})
+
+    if g.occupie_role == 'customer' and WaitlistEntry.query.filter(
+        WaitlistEntry.restaurant_id == g.restaurant_id,
+        WaitlistEntry.created_by_id == g.occupie_user.id,
+        WaitlistEntry.status.in_(('waiting', 'ready')),
+    ).first():
+        return _error('You already have an active waitlist entry.', 409)
 
     entry = WaitlistEntry(
         id=f"WL-{uuid4().hex[:8].upper()}",
@@ -437,7 +465,15 @@ def waitlist_collection():
     db.session.add(entry)
     _record_audit('waitlist', entry.id, 'waitlist.created', {'partySize': party_size})
     db.session.commit()
-    return jsonify({'waitlistEntry': entry.to_dict()}), 201
+    position = None
+    if g.occupie_role == 'customer':
+        position = WaitlistEntry.query.filter(
+            WaitlistEntry.restaurant_id == g.restaurant_id,
+            WaitlistEntry.status.in_(('waiting', 'ready')),
+            (WaitlistEntry.created_at < entry.created_at)
+            | ((WaitlistEntry.created_at == entry.created_at) & (WaitlistEntry.id <= entry.id)),
+        ).count()
+    return jsonify({'waitlistEntry': entry.to_dict(position=position)}), 201
 
 
 @operations_bp.route('/waitlist/<string:entry_id>', methods=['PATCH'])
@@ -448,6 +484,10 @@ def update_waitlist_entry(entry_id):
     entry = WaitlistEntry.query.filter_by(id=entry_id, restaurant_id=g.restaurant_id).first()
     if entry is None:
         return _error('Waitlist entry was not found.', 404)
+    if g.occupie_role == 'customer' and (
+        entry.created_by_id != g.occupie_user.id or payload.get('status') != 'cancelled'
+    ):
+        return _error('Customers may only leave their own active waitlist entry.', 403)
     status = payload.get('status')
     if status not in WAITLIST_STATUSES or status == 'seated':
         return _error('status must be waiting, ready, or cancelled.', 422, {'status': 'Invalid status.'})

@@ -61,7 +61,7 @@ describe('Occupie Frontend Phase 1 Foundation', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText('Restaurant Operations Hub')).toBeInTheDocument();
+    expect(screen.getByText('Restaurant Operations')).toBeInTheDocument();
     expect(screen.getByText('Occupancy Snapshot')).toBeInTheDocument();
     expect(screen.getByText('Active Table Units')).toBeInTheDocument();
   });

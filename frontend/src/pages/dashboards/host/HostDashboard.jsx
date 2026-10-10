@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { PageEntrance } from '../../../components/ui/PageEntrance';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../../components/ui/Card';
 import { StatCard } from '../../../components/ui/StatCard';
@@ -7,14 +8,63 @@ import { Button } from '../../../components/ui/Button';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { Input } from '../../../components/ui/Input';
 import { useOperationalData } from '../../../hooks/useOperationalData';
-import { recommendTable } from '../../../services/allocation';
+import { nextSeatableWaitlistEntry, recommendTable } from '../../../services/allocation';
 import {
   UserPlus,
   Clock,
   CheckCircle,
+  CircleAlert,
   Sparkles,
   Armchair,
+  RotateCw,
+  Users,
+  CalendarDays,
+  X,
 } from 'lucide-react';
+import './host-dashboard.css';
+
+const ACTIVE_RESERVATION_STATUSES = new Set(['confirmed', 'checked_in']);
+const motionEase = [0.22, 1, 0.36, 1];
+
+function readableTime(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function reservationTime(reservation) {
+  return reservation.startsAt || reservation.time || '';
+}
+
+function statusLabel(status) {
+  return String(status || 'confirmed').replaceAll('_', ' ');
+}
+
+function statusVariant(status) {
+  if (status === 'checked_in') return 'teal';
+  if (status === 'confirmed') return 'success';
+  return 'default';
+}
+
+function arrivalTimestamp(entry, now) {
+  const createdAt = entry.createdAt ? new Date(entry.createdAt).getTime() : Number.NaN;
+  if (Number.isFinite(createdAt)) return createdAt;
+  const waitMinutes = Number(entry.waitMinutes);
+  return Number.isFinite(waitMinutes) ? now - Math.max(0, waitMinutes) * 60_000 : now;
+}
+
+function waitLabel(entry, now, demoMode) {
+  if (entry.createdAt) {
+    const createdAt = new Date(entry.createdAt).getTime();
+    if (!Number.isFinite(createdAt)) return 'Wait time unavailable';
+    const minutes = Math.max(0, Math.floor((now - createdAt) / 60_000));
+    return `Waiting ${minutes} min`;
+  }
+  if (demoMode && Number.isFinite(Number(entry.waitMinutes))) {
+    return `Waiting ${Math.max(0, Number(entry.waitMinutes))} min · preview`;
+  }
+  return 'Wait time unavailable';
+}
 
 export function HostDashboard() {
   const {
@@ -24,14 +74,30 @@ export function HostDashboard() {
     loading,
     error,
     refresh,
+    dataMode,
+    demoMode,
     createWaitlistEntry,
     seatWaitlistEntry,
+    updateWaitlistStatus,
     seatReservation,
     updateReservationStatus,
   } = useOperationalData();
+  const prefersReducedMotion = useReducedMotion();
   const [actionNotice, setActionNotice] = useState(null);
   const [showWalkInForm, setShowWalkInForm] = useState(false);
   const [walkInForm, setWalkInForm] = useState({ partyName: '', partySize: '2', contact: '' });
+  const [savingWalkIn, setSavingWalkIn] = useState(false);
+  const [pendingActions, setPendingActions] = useState(() => new Set());
+  const [confirmNoShowId, setConfirmNoShowId] = useState(null);
+  const [confirmRemoveId, setConfirmRemoveId] = useState(null);
+  const [clock, setClock] = useState(() => Date.now());
+  const actionLocks = useRef(new Set());
+  const walkInLock = useRef(false);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const canSeat = (partySize) => tables.filter((table) =>
     recommendTable({ tables: [table], reservations, partySize }).table
@@ -39,94 +105,179 @@ export function HostDashboard() {
   const availableTwoTops = canSeat(2).filter((table) => table.capacity === 2).length;
   const availableFourTops = canSeat(4).filter((table) => table.capacity === 4).length;
   const availableSixPlus = canSeat(6).filter((table) => table.capacity >= 6).length;
-  const activeReservations = reservations.filter((res) => !['seated', 'cancelled', 'no_show'].includes(res.status));
-  const orderedWalkIns = [...walkIns].sort((left, right) => {
-    if (left.createdAt && right.createdAt) return new Date(left.createdAt) - new Date(right.createdAt);
-    return (right.waitMinutes || 0) - (left.waitMinutes || 0);
-  });
 
-  const handleSeatReservation = async (reservation) => {
+  const activeReservations = useMemo(() => reservations
+    .filter((reservation) => ACTIVE_RESERVATION_STATUSES.has(reservation.status))
+    .sort((left, right) => {
+      const leftTime = new Date(reservationTime(left)).getTime();
+      const rightTime = new Date(reservationTime(right)).getTime();
+      if (Number.isFinite(leftTime) && Number.isFinite(rightTime)) return leftTime - rightTime;
+      return String(reservationTime(left)).localeCompare(String(reservationTime(right)));
+    }), [reservations]);
+
+  const orderedWalkIns = useMemo(() => [...walkIns]
+    .filter((entry) => ['waiting', 'ready'].includes(entry.status))
+    .sort((left, right) => arrivalTimestamp(left, clock) - arrivalTimestamp(right, clock)
+      || String(left.id).localeCompare(String(right.id))), [walkIns, clock]);
+
+  const nextSeatable = nextSeatableWaitlistEntry({ waitlist: orderedWalkIns, tables, reservations });
+  const nextSeatableId = nextSeatable.entry?.id;
+  const dataUnavailable = loading || Boolean(error);
+
+  const runAction = async (key, action) => {
+    if (actionLocks.current.has(key)) return;
+    actionLocks.current.add(key);
+    setPendingActions((current) => new Set(current).add(key));
+    try {
+      await action();
+    } finally {
+      actionLocks.current.delete(key);
+      setPendingActions((current) => {
+        const updated = new Set(current);
+        updated.delete(key);
+        return updated;
+      });
+    }
+  };
+
+  const handleSeatReservation = (reservation) => runAction(`reservation:${reservation.id}`, async () => {
     const result = await seatReservation(reservation.id);
     setActionNotice(result.success
-      ? `Seated ${reservation.guestName} at ${result.data.table?.id || reservation.table}.`
-      : `Could not seat ${reservation.guestName}: ${result.error}`);
-  };
+      ? { type: 'success', message: `Seated ${reservation.guestName} at ${result.data.table?.id || reservation.table}.` }
+      : { type: 'error', message: `Could not seat ${reservation.guestName}: ${result.error}` });
+  });
 
-  const handleSeatWalkIn = async (entry) => {
+  const handleSeatWalkIn = (entry) => runAction(`waitlist:${entry.id}`, async () => {
     const result = await seatWaitlistEntry(entry.id);
     setActionNotice(result.success
-      ? `Seated ${entry.partyName} at ${result.data.table.id}.`
-      : `Could not seat ${entry.partyName}: ${result.error}`);
-  };
+      ? { type: 'success', message: `Seated ${entry.partyName} at ${result.data.table.id}.` }
+      : { type: 'error', message: `Could not seat ${entry.partyName}: ${result.error}` });
+  });
 
   const handleWalkInSubmit = async (event) => {
     event.preventDefault();
+    if (walkInLock.current) return;
+    const partyName = walkInForm.partyName.trim();
     const partySize = Number(walkInForm.partySize);
-    if (!walkInForm.partyName.trim() || !Number.isInteger(partySize) || partySize < 1) return;
+    if (!partyName || !Number.isInteger(partySize) || partySize < 1 || partySize > 30) return;
+
+    walkInLock.current = true;
+    setSavingWalkIn(true);
     const result = await createWaitlistEntry({
-      partyName: walkInForm.partyName.trim(),
+      partyName,
       partySize,
       contact: walkInForm.contact.trim(),
     });
+    walkInLock.current = false;
+    setSavingWalkIn(false);
     if (!result.success) {
-      setActionNotice(`Could not add ${walkInForm.partyName.trim()}: ${result.error}`);
+      setActionNotice({ type: 'error', message: `Could not add ${partyName}: ${result.error}` });
       return;
     }
-    setActionNotice(`${walkInForm.partyName.trim()} was added to the waitlist.`);
+    setActionNotice({ type: 'success', message: `${partyName} was added to the waitlist.` });
     setWalkInForm({ partyName: '', partySize: '2', contact: '' });
     setShowWalkInForm(false);
   };
 
-  const handleNoShow = async (reservation) => {
+  const handleNoShow = (reservation) => runAction(`reservation:${reservation.id}`, async () => {
     const result = await updateReservationStatus(reservation.id, 'no_show');
+    setConfirmNoShowId(null);
     setActionNotice(result.success
-      ? `${reservation.guestName} was marked as a no-show.`
-      : `Could not update reservation: ${result.error}`);
+      ? { type: 'success', message: `${reservation.guestName} was marked as a no-show.` }
+      : { type: 'error', message: `Could not update reservation: ${result.error}` });
+  });
+
+  const handleRemoveWalkIn = (entry) => runAction(`waitlist:${entry.id}`, async () => {
+    const result = await updateWaitlistStatus(entry.id, 'cancelled');
+    setConfirmRemoveId(null);
+    setActionNotice(result.success
+      ? { type: 'success', message: `${entry.partyName} was removed from the waitlist.` }
+      : { type: 'error', message: `Could not remove ${entry.partyName}: ${result.error}` });
+  });
+
+  const revealProps = (index) => prefersReducedMotion ? {} : {
+    initial: { opacity: 0, y: 12 },
+    animate: { opacity: 1, y: 0 },
+    transition: { duration: 0.34, delay: index * 0.055, ease: motionEase },
   };
 
   return (
-    <PageEntrance className="space-y-6 sm:space-y-8">
-      {/* Header and Quick CTAs */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-              Host Stand & Seating Desk
-            </h2>
+    <PageEntrance className="host-dashboard space-y-6 sm:space-y-8">
+      <header className="host-dashboard__masthead">
+        <motion.div {...revealProps(0)}>
+          <p className="host-dashboard__eyebrow">Occupie · Front of house</p>
+          <div className="flex flex-wrap items-center gap-3">
+            <h2 className="host-dashboard__title">Host Stand &amp; Seating Desk</h2>
             <Badge variant="teal" size="sm">Front-of-House</Badge>
           </div>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Register walk-ins, sequence the current queue, and seat parties using capacity and reservation checks.
+          <p className="host-dashboard__intro">
+            A clear view of tonight’s arrivals, the walk-in queue, and the tables ready to welcome them.
           </p>
-        </div>
+        </motion.div>
 
-        <div className="flex items-center flex-wrap gap-2.5">
+        <motion.div className="host-dashboard__masthead-actions" {...revealProps(1)}>
+          <span className={`host-dashboard__source ${demoMode ? 'is-preview' : 'is-live'}`}>
+            <span aria-hidden="true" className="host-dashboard__source-dot" />
+            {demoMode ? 'Preview data · resets on reload' : 'Connected restaurant data'}
+          </span>
+          {!demoMode && (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={refresh}
+              disabled={loading}
+              isLoading={loading}
+              icon={RotateCw}
+            >
+              Refresh
+            </Button>
+          )}
           <Button
             size="sm"
             variant="primary"
             onClick={() => setShowWalkInForm((isOpen) => !isOpen)}
             icon={UserPlus}
+            aria-expanded={showWalkInForm}
+            aria-controls="host-walkin-form"
           >
             {showWalkInForm ? 'Close Walk-In Form' : 'Add Walk-In'}
           </Button>
-        </div>
+        </motion.div>
+      </header>
+
+      <div className="host-dashboard__shiftline" aria-label="Shift overview">
+        <span><CalendarDays aria-hidden="true" /> Current service</span>
+        <span><Users aria-hidden="true" /> {dataUnavailable ? '—' : `${activeReservations.length} active reservations`}</span>
+        <span><Clock aria-hidden="true" /> {dataUnavailable ? '—' : `${orderedWalkIns.length} parties waiting`}</span>
+        <span className="host-dashboard__shiftline-rule" />
       </div>
 
       {(loading || error) && (
-        <div role={error ? 'alert' : 'status'} className={`rounded-xl border px-4 py-3 text-sm ${error ? 'border-rose-200 bg-rose-50 text-rose-900' : 'border-slate-200 bg-white text-slate-600'}`}>
-          {loading ? 'Loading restaurant data…' : error}
+        <div role={error ? 'alert' : 'status'} className={`host-dashboard__feedback ${error ? 'is-error' : ''}`}>
+          {loading ? 'Loading authorized restaurant data…' : error}
           {error && <button type="button" className="ml-3 font-semibold underline" onClick={refresh}>Retry</button>}
         </div>
       )}
 
-      {showWalkInForm && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Register a Walk-In Party</CardTitle>
-            <CardDescription>Add the party to the queue. A wait time is shown only when supported by service data.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleWalkInSubmit} className="grid grid-cols-1 gap-4 sm:grid-cols-4 sm:items-end">
+      <AnimatePresence initial={false}>
+        {showWalkInForm && (
+          <motion.section
+            id="host-walkin-form"
+            className="host-dashboard__walkin-panel"
+            aria-label="Register a walk-in party"
+            initial={prefersReducedMotion ? false : { opacity: 0, height: 0, y: -6 }}
+            animate={{ opacity: 1, height: 'auto', y: 0 }}
+            exit={prefersReducedMotion ? undefined : { opacity: 0, height: 0, y: -6 }}
+            transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.22, ease: motionEase }}
+          >
+            <div className="host-dashboard__walkin-heading">
+              <div>
+                <p className="host-dashboard__eyebrow">New arrival</p>
+                <h3>Register a walk-in</h3>
+                <p>Add the party to the arrival-ordered queue. Wait estimates are shown only when service data supports them.</p>
+              </div>
+            </div>
+            <form onSubmit={handleWalkInSubmit} className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 xl:items-end">
               <Input
                 label="Party name"
                 value={walkInForm.partyName}
@@ -134,12 +285,14 @@ export function HostDashboard() {
                 placeholder="e.g. The Garcia party"
                 required
                 maxLength={120}
+                autoComplete="off"
               />
               <Input
                 label="Guests"
                 type="number"
                 min="1"
                 max="30"
+                step="1"
                 value={walkInForm.partySize}
                 onChange={(event) => setWalkInForm((form) => ({ ...form, partySize: event.target.value }))}
                 required
@@ -150,175 +303,234 @@ export function HostDashboard() {
                 value={walkInForm.contact}
                 onChange={(event) => setWalkInForm((form) => ({ ...form, contact: event.target.value }))}
                 placeholder="Phone number"
+                maxLength={40}
+                autoComplete="tel"
               />
-              <Button type="submit" variant="accent" icon={UserPlus}>Add to Queue</Button>
+              <Button type="submit" variant="accent" icon={UserPlus} isLoading={savingWalkIn}>
+                {savingWalkIn ? 'Adding party…' : 'Add to Queue'}
+              </Button>
             </form>
-          </CardContent>
-        </Card>
-      )}
+          </motion.section>
+        )}
+      </AnimatePresence>
 
       {actionNotice && (
-        <div role="status" className="p-3.5 rounded-xl bg-teal-50 border border-teal-200 text-teal-900 text-xs font-semibold flex items-center justify-between animate-fadeIn">
-          <div className="flex items-center gap-2">
-            <CheckCircle className="w-4 h-4 text-teal-600" />
-            <span>{actionNotice}</span>
-          </div>
-          <button onClick={() => setActionNotice(null)} className="text-teal-700 hover:text-teal-900 font-bold">
-            &times;
-          </button>
+        <div role={actionNotice.type === 'error' ? 'alert' : 'status'} className={`host-dashboard__notice ${actionNotice.type === 'error' ? 'is-error' : ''}`}>
+          {actionNotice.type === 'error'
+            ? <CircleAlert aria-hidden="true" />
+            : <CheckCircle aria-hidden="true" />}
+          <span>{actionNotice.message}</span>
+          <button type="button" onClick={() => setActionNotice(null)} aria-label="Dismiss notice">&times;</button>
         </div>
       )}
 
-      {/* Seating Availability Summary Cards */}
-      <div id="availability" className="grid grid-cols-1 sm:grid-cols-3 gap-4 scroll-mt-24">
-        <StatCard
-          title="Available 2-Guest Tables"
-          value={availableTwoTops}
-          subtitle="Window & Chef Counter"
-          icon={Armchair}
-          accentColor="teal"
-        />
-        <StatCard
-          title="Available 4-Guest Tables"
-          value={availableFourTops}
-          subtitle="Main Hall & Booths"
-          icon={Armchair}
-          accentColor="cyan"
-        />
-        <StatCard
-          title="Open Large (6-8p) Tables"
-          value={availableSixPlus}
-          subtitle="Private Alcove available"
-          icon={Armchair}
-          accentColor="amber"
-        />
-      </div>
+      <section aria-label="Table availability" className="host-dashboard__availability">
+        <div className="host-dashboard__section-heading">
+          <div>
+            <p className="host-dashboard__eyebrow">The floor</p>
+            <h3>Available by party size</h3>
+          </div>
+          <span>Current availability · reservation holds applied</span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <StatCard title="Two guests" value={dataUnavailable ? '—' : availableTwoTops} subtitle={loading ? 'Checking floor…' : error ? 'Availability could not be loaded' : 'Available tables · capacity 2'} icon={Armchair} accentColor="teal" className="host-dashboard__stat" />
+          <StatCard title="Four guests" value={dataUnavailable ? '—' : availableFourTops} subtitle={loading ? 'Checking floor…' : error ? 'Availability could not be loaded' : 'Available tables · capacity 4'} icon={Armchair} accentColor="cyan" className="host-dashboard__stat" />
+          <StatCard title="Six or more" value={dataUnavailable ? '—' : availableSixPlus} subtitle={loading ? 'Checking floor…' : error ? 'Availability could not be loaded' : 'Available tables · capacity 6+'} icon={Armchair} accentColor="amber" className="host-dashboard__stat" />
+        </div>
+      </section>
 
-      {/* 2 Columns: Today's Reservations & Walk-In Waitlist */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Today's Reservations (7 cols) */}
-        <div className="lg:col-span-7 space-y-6">
-          <Card id="reservations" className="scroll-mt-24">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 host-dashboard__workbench">
+        <section className="lg:col-span-7 space-y-6" aria-label="Reservation schedule">
+          <Card id="reservations" className="host-dashboard__panel scroll-mt-24">
             <CardHeader
-              action={
-                <Badge variant="teal" size="sm">
-                  {reservations.length} Bookings
-                </Badge>
-              }
+              action={<Badge variant="teal" size="sm">{dataUnavailable ? '—' : `${activeReservations.length} active`}</Badge>}
+              className="host-dashboard__panel-header"
             >
-              <CardTitle>Evening Reservations Schedule</CardTitle>
-              <CardDescription>
-                Confirmed and checked-in bookings, with table assignments protected by the allocation rules.
-              </CardDescription>
+              <p className="host-dashboard__eyebrow">Tonight</p>
+              <CardTitle>Reservation schedule</CardTitle>
+              <CardDescription>Arrivals are ordered by booking time. Table assignment is checked again when seating.</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              {activeReservations.length ? <div className="divide-y divide-slate-100">
-                {activeReservations.map((res) => (
-                  <div key={res.id} className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50 transition-colors">
-                    <div className="flex items-start gap-3">
-                      <div className="w-12 h-12 rounded-xl bg-occupie-navy-900 text-white flex flex-col items-center justify-center shrink-0 shadow-xs">
-                        <span className="text-xs font-bold leading-none">{res.time || (res.startsAt ? new Date(res.startsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—')}</span>
-                        <span className="text-[9px] text-occupie-teal-400 uppercase mt-0.5">Time</span>
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-slate-900 text-sm">{res.guestName}</span>
-                          <span className="text-xs text-slate-400">&bull;</span>
-                          <span className="text-xs font-semibold text-slate-600">Party of {res.partySize}</span>
-                        </div>
-                        <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-2">
-                          <span>Target: <strong className="text-slate-800">{res.table}</strong></span>
-                          <span>&bull;</span>
-                          <span className="text-slate-400">{res.phone}</span>
-                        </div>
-                        {res.notes && (
-                          <p className="text-[11px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded mt-1.5 inline-block border border-amber-200/50">
-                            {res.notes}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 self-end sm:self-center">
-                      <Button size="sm" variant="secondary" onClick={() => handleSeatReservation(res)}>
-                        Seat Guest
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => handleNoShow(res)}>
-                        No-show
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div> : <EmptyState title="No upcoming reservations" description="New reservations will appear here when they are created." />}
+              {activeReservations.length ? (
+                <div className="divide-y divide-stone-200/80">
+                  <AnimatePresence initial={false}>
+                    {activeReservations.map((reservation, index) => {
+                      const pending = pendingActions.has(`reservation:${reservation.id}`);
+                      const confirmingNoShow = confirmNoShowId === reservation.id;
+                      return (
+                        <motion.article
+                          key={reservation.id}
+                          layout={!prefersReducedMotion}
+                          initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={prefersReducedMotion ? undefined : { opacity: 0, height: 0 }}
+                          transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.22, delay: Math.min(index * 0.025, 0.15), ease: motionEase }}
+                          className="host-dashboard__reservation"
+                        >
+                          <div className="host-dashboard__reservation-time">
+                            <span>{readableTime(reservation.startsAt || reservation.time)}</span>
+                            <span>Arrival</span>
+                          </div>
+                          <div className="host-dashboard__reservation-details">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h4>{reservation.guestName || 'Guest'}</h4>
+                              <Badge variant={statusVariant(reservation.status)} size="sm">{statusLabel(reservation.status)}</Badge>
+                            </div>
+                            <p>Party of {reservation.partySize} <span aria-hidden="true">·</span> {reservation.table ? `Table ${reservation.table}` : 'Table unassigned'}</p>
+                            {reservation.notes && <p className="host-dashboard__note">{reservation.notes}</p>}
+                            {reservation.phone && <p className="host-dashboard__contact">{reservation.phone}</p>}
+                          </div>
+                          <div className="host-dashboard__reservation-actions">
+                            <Button size="sm" variant="secondary" onClick={() => handleSeatReservation(reservation)} disabled={pending} isLoading={pending}>
+                              Seat guest
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => setConfirmNoShowId(confirmingNoShow ? null : reservation.id)} disabled={pending}>
+                              No-show
+                            </Button>
+                          </div>
+                          <AnimatePresence initial={false}>
+                            {confirmingNoShow && (
+                              <motion.div
+                                className="host-dashboard__confirm"
+                                role="group"
+                                aria-label={`Confirm no-show for ${reservation.guestName || 'this guest'}`}
+                                initial={prefersReducedMotion ? false : { opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={prefersReducedMotion ? undefined : { opacity: 0, height: 0 }}
+                              >
+                                <p>Mark {reservation.guestName || 'this guest'} as a no-show?</p>
+                                <div>
+                                  <Button size="sm" variant="ghost" onClick={() => setConfirmNoShowId(null)} disabled={pending}>Keep booking</Button>
+                                  <Button size="sm" variant="danger" onClick={() => handleNoShow(reservation)} disabled={pending} isLoading={pending}>Confirm no-show</Button>
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </motion.article>
+                      );
+                    })}
+                  </AnimatePresence>
+                </div>
+              ) : (
+                <EmptyState title={loading ? 'Loading reservations' : error ? 'Schedule unavailable' : 'No active reservations'} description={loading ? 'The reservation schedule is being refreshed.' : error ? 'Retry the data request to load the current bookings.' : 'New bookings will appear here when they are created.'} />
+              )}
             </CardContent>
           </Card>
-        </div>
+        </section>
 
-        {/* Walk-In Queue (5 cols) */}
-        <div className="lg:col-span-5 space-y-6">
-          <Card id="waitlist" className="scroll-mt-24">
+        <section className="lg:col-span-5 space-y-6" aria-label="Walk-in waitlist and seating rules">
+          <Card id="waitlist" className="host-dashboard__panel scroll-mt-24">
             <CardHeader
-              action={
-                <span className="text-xs font-semibold text-slate-500">
-                  {orderedWalkIns.length} In Queue
-                </span>
-              }
+              action={<span className="host-dashboard__queue-count">{dataUnavailable ? '—' : `${orderedWalkIns.length} waiting`}</span>}
+              className="host-dashboard__panel-header"
             >
-              <CardTitle>Current Walk-In Waitlist</CardTitle>
-              <CardDescription>
-                Guests waiting on-site for next available table.
-              </CardDescription>
+              <p className="host-dashboard__eyebrow">Arrivals</p>
+              <CardTitle>Walk-in waitlist</CardTitle>
+              <CardDescription>Oldest arrival with a suitable open table is next to seat.</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              {orderedWalkIns.length ? <div className="divide-y divide-slate-100">
-                {orderedWalkIns.map((item, idx) => (
-                  <div key={item.id} className="p-4 flex items-center justify-between gap-3 hover:bg-slate-50">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center shrink-0">
-                        #{idx + 1}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="text-xs font-bold text-slate-900">{item.partyName}</p>
-                          <span className="text-[10px] text-slate-400">({item.partySize}p)</span>
-                        </div>
-                        <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
-                          <Clock className="w-3 h-3 text-slate-400" />
-                          <span>Waiting {item.waitMinutes}m &bull; {item.quotedWait ? `Demo estimate ${item.quotedWait}` : 'No wait estimate'}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                      <Button
-                        size="sm"
-                        variant={item.status === 'ready' ? 'accent' : 'secondary'}
-                        className="text-xs py-1 px-2.5"
-                        onClick={() => handleSeatWalkIn(item)}
-                      >
-                        {item.status === 'ready' ? 'Table Ready' : 'Allocate'}
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div> : <EmptyState title="The waitlist is clear" description="Add a walk-in party to keep the queue in order." actionLabel="Add a walk-in" onAction={() => setShowWalkInForm(true)} />}
+              {orderedWalkIns.length ? (
+                <ol className="divide-y divide-stone-200/80">
+                  <AnimatePresence initial={false}>
+                    {orderedWalkIns.map((entry, index) => {
+                      const recommendation = recommendTable({ tables, reservations, partySize: entry.partySize });
+                      const isNext = entry.id === nextSeatableId;
+                      const pending = pendingActions.has(`waitlist:${entry.id}`);
+                      const confirmingRemoval = confirmRemoveId === entry.id;
+                      return (
+                        <motion.li
+                          key={entry.id}
+                          layout={!prefersReducedMotion}
+                          initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={prefersReducedMotion ? undefined : { opacity: 0, height: 0 }}
+                          transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.22, delay: Math.min(index * 0.025, 0.15), ease: motionEase }}
+                          className={`host-dashboard__queue-entry ${isNext ? 'is-next' : ''}`}
+                        >
+                          <div className="host-dashboard__queue-index" aria-label={`Queue position ${index + 1}`}>{String(index + 1).padStart(2, '0')}</div>
+                          <div className="host-dashboard__queue-main">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h4>{entry.partyName}</h4>
+                              {isNext && <Badge variant="teal" size="sm">Next to seat</Badge>}
+                              {entry.status === 'ready' && <Badge variant="success" size="sm">Table ready</Badge>}
+                            </div>
+                            <p>Party of {entry.partySize} <span aria-hidden="true">·</span> {waitLabel(entry, clock, demoMode)}</p>
+                            <p className="host-dashboard__recommendation">
+                              <Sparkles aria-hidden="true" />
+                              {recommendation.table
+                                ? `Suggested ${recommendation.table.id} · ${recommendation.table.capacity} seats · smallest suitable fit`
+                                : recommendation.reason}
+                            </p>
+                            {demoMode && entry.quotedWait && <p className="host-dashboard__preview-quote">Preview quote: {entry.quotedWait}</p>}
+                          </div>
+                          <div className="host-dashboard__queue-actions">
+                            <Button
+                              size="sm"
+                              variant={entry.status === 'ready' ? 'accent' : 'secondary'}
+                              className="host-dashboard__allocate"
+                              onClick={() => handleSeatWalkIn(entry)}
+                              disabled={pending || !recommendation.table}
+                              isLoading={pending}
+                              title="Seating is confirmed immediately; availability is rechecked by the service."
+                            >
+                              {entry.status === 'ready' ? 'Table Ready' : 'Allocate'}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="host-dashboard__remove"
+                              onClick={() => setConfirmRemoveId(confirmingRemoval ? null : entry.id)}
+                              disabled={pending}
+                              aria-label={`Remove ${entry.partyName} from waitlist`}
+                              title="Remove from waitlist"
+                            >
+                              <X aria-hidden="true" />
+                            </Button>
+                          </div>
+                          <AnimatePresence initial={false}>
+                            {confirmingRemoval && (
+                              <motion.div
+                                className="host-dashboard__confirm host-dashboard__queue-confirm"
+                                role="group"
+                                aria-label={`Confirm waitlist removal for ${entry.partyName}`}
+                                initial={prefersReducedMotion ? false : { opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={prefersReducedMotion ? undefined : { opacity: 0, height: 0 }}
+                              >
+                                <p>Remove {entry.partyName} from the waitlist?</p>
+                                <div>
+                                  <Button size="sm" variant="ghost" onClick={() => setConfirmRemoveId(null)} disabled={pending}>Keep party</Button>
+                                  <Button size="sm" variant="danger" onClick={() => handleRemoveWalkIn(entry)} disabled={pending} isLoading={pending}>Confirm removal</Button>
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </motion.li>
+                      );
+                    })}
+                  </AnimatePresence>
+                </ol>
+              ) : (
+                <EmptyState title={loading ? 'Loading waitlist' : error ? 'Waitlist unavailable' : 'The waitlist is clear'} description={loading ? 'Arrivals are being refreshed.' : error ? 'Retry the data request to load current arrivals.' : 'Register a walk-in party to begin an arrival-ordered queue.'} actionLabel={!loading && !error ? 'Add a walk-in' : undefined} onAction={() => setShowWalkInForm(true)} />
+              )}
             </CardContent>
           </Card>
 
-          {/* Seating Recommendation Preview Box */}
-          <Card className="bg-gradient-to-br from-slate-900 to-occupie-navy-950 text-white border-occupie-navy-800">
-            <CardContent className="p-5 space-y-2.5">
-              <div className="flex items-center gap-2 text-occupie-teal-400 text-xs font-bold uppercase tracking-wider">
-                <Sparkles className="w-4 h-4" />
-                Allocation Rule
-              </div>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                Occupie considers available tables that fit the party, protects confirmed reservation windows, and recommends the smallest suitable table. It does not predict when an occupied table will clear.
-              </p>
+          <Card className="host-dashboard__rule-panel">
+            <CardContent className="p-5 sm:p-6">
+              <div className="host-dashboard__rule-heading"><Sparkles aria-hidden="true" /><span>How seating is suggested</span></div>
+              <p>Occupie checks current table availability, party capacity, and nearby confirmed reservation holds, then prefers the smallest suitable table. The server revalidates before seating. Occupied-table turnover and future wait times are not predicted.</p>
+              {nextSeatable.table && nextSeatable.entry && (
+                <div className="host-dashboard__rule-pick">
+                  <span>Next eligible party</span>
+                  <strong>{nextSeatable.entry.partyName} <span>→</span> {nextSeatable.table.id}</strong>
+                </div>
+              )}
             </CardContent>
           </Card>
-        </div>
+        </section>
       </div>
+      <span className="sr-only">Data source: {demoMode ? 'preview fixtures' : dataMode === 'api' ? 'restaurant API' : 'configured service'}.</span>
     </PageEntrance>
   );
 }

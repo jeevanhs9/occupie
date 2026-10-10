@@ -43,6 +43,18 @@ export function useOperationalData() {
     return { success: true };
   }, [demoMode]);
 
+  const refreshWaitlist = useCallback(async () => {
+    if (demoMode) return { success: true };
+    const result = await apiService.waitlist.list();
+    if (!result.success) {
+      setError(resultError(result));
+      return result;
+    }
+    setWaitlist(result.data?.waitlist || []);
+    setError(null);
+    return result;
+  }, [demoMode]);
+
   useEffect(() => {
     if (!demoMode) refresh();
   }, [demoMode, refresh]);
@@ -289,6 +301,7 @@ export function useOperationalData() {
     loading,
     error,
     refresh,
+    refreshWaitlist,
     updateTableStatus,
     createTable,
     createWaitlistEntry,

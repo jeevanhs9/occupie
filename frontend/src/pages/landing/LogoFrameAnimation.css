@@ -1,0 +1,11 @@
+.logo-frame-animation {
+  aspect-ratio: 16 / 9;
+  background: transparent;
+  pointer-events: none;
+}
+
+.logo-frame-canvas {
+  display: block;
+  height: 100%;
+  width: 100%;
+}

@@ -38,13 +38,20 @@ class Reservation(db.Model):
     restaurant = db.relationship('Restaurant')
 
     def to_dict(self):
+        starts_at = self.starts_at
+        if starts_at and starts_at.tzinfo is None:
+            # SQLite drops timezone metadata for DateTime(timezone=True).
+            # Reservation timestamps are normalized to UTC at the API boundary.
+            starts_at = starts_at.replace(tzinfo=timezone.utc)
+        if starts_at:
+            starts_at = starts_at.astimezone(timezone.utc)
         return {
             'id': self.id,
             'restaurantName': self.restaurant.name if self.restaurant else None,
             'guestName': self.guest_name,
             'partySize': self.party_size,
-            'startsAt': self.starts_at.isoformat() if self.starts_at else None,
-            'time': self.starts_at.strftime('%H:%M') if self.starts_at else None,
+            'startsAt': starts_at.isoformat().replace('+00:00', 'Z') if starts_at else None,
+            'time': starts_at.strftime('%H:%M') if starts_at else None,
             'table': self.table_id,
             'status': self.status,
             'phone': self.phone,

@@ -16,7 +16,7 @@ function LuxuryNavigation({ menuOpen, setMenuOpen, scrolled, reduceMotion }) {
   return (
     <header className={`luxury-nav ${menuOpen ? 'luxury-nav-menu-open' : scrolled ? 'luxury-nav-solid' : ''}`}>
       <div className="luxury-nav-inner">
-        <Logo size="md" theme="light" />
+        <Logo size="md" theme="light" className="landing-nav-logo" />
         <nav className="luxury-links" aria-label="Primary navigation">
           {links.map(([label, target]) => <button key={target} onClick={() => goTo(target)}>{label}</button>)}
         </nav>
@@ -51,7 +51,7 @@ export function LandingPage() {
   }, []);
 
   return (
-    <div className="luxury-page">
+    <div className="luxury-page cinematic-intro-active">
       <LuxuryNavigation menuOpen={menuOpen} setMenuOpen={setMenuOpen} scrolled={scrolled} reduceMotion={reduceMotion} />
       <main>
         <CinematicScene />
