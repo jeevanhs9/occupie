@@ -58,11 +58,11 @@ Tables, reservations, waitlist entries, memberships, restaurants, token revocati
 
 6. **Manager analytics are not backed by reporting data.** [`ManagerDashboard.jsx`](../frontend/src/pages/dashboards/manager/ManagerDashboard.jsx) calculates current-state display values, uses labeled demo values for some metrics, and creates a browser CSV. No analytics/revenue route is registered in [`__init__.py`](../backend/app/__init__.py).
 
-7. **Legacy Flask route modules are unreachable and stale.** [`allocations.py`](../backend/app/routes/allocations.py), [`reservations.py`](../backend/app/routes/reservations.py), and [`tables.py`](../backend/app/routes/tables.py) define older route shapes but are not registered. Their fields/signatures (for example `start_time`, `end_time`, `table_number`, and the older allocation call) do not match current models/services. The active contract is `operations.py`. Keep the older modules until references and compatibility needs have been checked; do not register them as-is or mistake them for live endpoints.
+7. **Legacy Flask route modules were unreachable and stale.** The prior `allocations.py`, `reservations.py`, and `tables.py` modules were not registered, imported, or referenced by tests, and their field/signature contracts did not match the active API. They were removed after that audit; the registered `operations.py` blueprint remains the active contract. See [`CLEANUP_REPORT.md`](CLEANUP_REPORT.md).
 
 8. **Verification resend is service-only, with no page action.** [`api.js`](../frontend/src/services/api.js) exports `resendVerification`, but [`AuthActionPage.jsx`](../frontend/src/pages/auth/AuthActionPage.jsx) does not call it. It is currently unreachable from the UI.
 
-9. **Some landing animation modules look unreferenced.** `NativeBrandAnimation.jsx` and `OccupieHeroLockup.jsx` have no imports in `frontend/src` outside their own declarations. Treat these as apparent dead candidates only; preserve them until product intent and asset dependencies are checked.
+9. **Unused landing modules were removed.** `NativeBrandAnimation.jsx`, its stylesheet, and `OccupieHeroLockup.jsx` had no production imports or runtime references. The active landing animation remains `LogoFrameAnimation.jsx`; all original media assets were retained. See [`CLEANUP_REPORT.md`](CLEANUP_REPORT.md).
 
 10. **OccupieChat is only mounted on the four root workspace URLs.** [`App.jsx`](../frontend/src/App.jsx) checks exact pathname equality, so `/dashboard/customer/book`, `/dashboard/customer/upcoming`, and `/dashboard/customer/history` do not mount chat. Verify intended placement before changing navigation behavior.
 
@@ -72,7 +72,7 @@ Tables, reservations, waitlist entries, memberships, restaurants, token revocati
 
 ### Frontend pages
 
-- Public: `pages/landing/LandingPage.jsx`, `CinematicScene.jsx`, `ProductStory.jsx`, `BrandAnimation.jsx`, `LogoFrameAnimation.jsx`, `NativeBrandAnimation.jsx`, and `OccupieHeroLockup.jsx` (plus the two animation CSS files).
+- Public: `pages/landing/LandingPage.jsx`, `CinematicScene.jsx`, `ProductStory.jsx`, `BrandAnimation.jsx`, and `LogoFrameAnimation.jsx` (with `LogoFrameAnimation.css`).
 - Auth: `pages/auth/LoginPage.jsx`, `AuthActionPage.jsx`, and demo-only `RoleSelectPage.jsx`.
 - Workspaces: `pages/dashboards/manager/ManagerDashboard.jsx`, `host/HostDashboard.jsx`, `floor-staff/FloorStaffDashboard.jsx`, and `customer/CustomerDashboard.jsx` (also used for customer subroutes; host/customer each have a CSS file).
 

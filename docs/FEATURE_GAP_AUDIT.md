@@ -1,7 +1,9 @@
 # Occupie feature gap audit
 
 **Audit date:** 2026-10-11  
-**Verdict:** Ready with limitations for a controlled hackathon demo after applying the current database migrations to the chosen demo database. The core customer, host, floor-staff, and manager paths now have automated coverage; a scratch-database browser smoke test verified all four workspaces. Production deployment and PostgreSQL behavior remain unverified.
+**Verdict:** Ready with limitations for a controlled hackathon demo using the migrated default local SQLite database. Other target databases must be backed up and migrated. The core customer, host, floor-staff, and manager paths have automated coverage; a scratch-database browser smoke test verified all four workspaces. Production deployment and PostgreSQL behavior remain unverified.
+
+**Follow-up:** The default local SQLite database was backed up and migrated from `e880f4e1dce4` to `a6b7c8d9e012` before the app was started. A different demo database still requires its own backup and migration.
 
 This matrix reflects the implementation and evidence collected in this audit, not earlier roadmap status. “Verified” means the implementation is supported by source and a relevant passing test or browser observation. “Partial” means a path works with a stated limit. “Missing” means the requested capability is not implemented. “Untested” means the code may exist but this audit did not verify it.
 
@@ -29,13 +31,13 @@ This matrix reflects the implementation and evidence collected in this audit, no
 - Backend: `.venv\Scripts\python.exe -m pytest -q` — **87 passed**.
 - Frontend: `npm test -- --run` — **8 files, 38 tests passed**. The run emitted React Router future-flag and pre-existing React `act(...)` warnings, but no test failed.
 - Production frontend build: `npm run build` — **passed**; Vite transformed 1,973 modules and completed in about 3.2 seconds.
-- Migrations: fresh scratch SQLite database upgraded through `a6b7c8d9e012`. A populated scratch database starting at `e880f4e1dce4` retained its restaurant, table, reservation status, and waitlist status after upgrading to head. The user's existing database was not migrated.
+- Migrations: fresh and populated scratch SQLite databases upgraded through `a6b7c8d9e012`; the populated scratch records were retained. The default local SQLite database was then backed up and migrated from `e880f4e1dce4` to head. PostgreSQL migration remains untested.
 - Browser smoke: login and loaded-data checks passed for all four role workspaces against scratch SQLite; customer reservation reference persisted; manager settings/simulation loaded; host queue recommendations loaded; floor staff updated an assigned cleaning table to available; floor staff was redirected from the manager route.
-- Not verified: existing `backend/instance/occupie_dev.db` migration state, PostgreSQL upgrade/concurrency, cross-origin production CORS, final deployment host, and a complete manual walk-through of every manager/host mutation.
+- Not verified: PostgreSQL upgrade/concurrency, cross-origin production CORS, final deployment host, and a complete manual walk-through of every manager/host mutation.
 
 ## Priority remaining actions
 
-1. Back up the actual demo database, then run `flask --app run db upgrade` with the intended `DATABASE_URL`; confirm `flask --app run db current` reports `a6b7c8d9e012` before demoing.
+1. Confirm the demo uses the migrated default local SQLite database. If it uses another database, back it up, run `flask --app run db upgrade` with the intended `DATABASE_URL`, and confirm `flask --app run db current` reports `a6b7c8d9e012` before demoing.
 2. On the target demo machine, verify `.env` values, staff logins, allowed frontend origin, secure-cookie behavior, and each role's main action in the actual browser.
 3. If production/PostgreSQL readiness is required, validate migrations and concurrent allocations on a disposable PostgreSQL database and verify reverse-proxy/TLS/Redis configuration.
 4. Replace remaining old presentation/acceptance claims about live updates and production readiness before using those materials with judges.

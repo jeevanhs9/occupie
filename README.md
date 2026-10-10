@@ -1,6 +1,14 @@
 # Occupie — Restaurant Seating Operations
 
-Occupie is a restaurant seating operations prototype for coordinating tables, reservations, walk-ins, and service updates. It provides separate workspaces for managers, hosts, floor staff, and customers. Read [the final readiness audit](docs/FINAL_READINESS_AUDIT.md) for verified scope and limitations.
+## Release readiness: Ready with limitations
+
+The 2026-10-11 audit recorded a passing frontend production build, **87 backend tests**, and **38 frontend tests**. Browser checks using disposable SQLite data covered all four role workspaces, customer booking, and a floor-staff table update. A fresh demo seed created three completed visits and five confirmed bookings; a second run added no duplicate rows.
+
+The default local SQLite database was subsequently backed up to `backend/instance/occupie_dev.before-run-20261011-034400.db` and migrated from `e880f4e1dce4` to `a6b7c8d9e012` before the app was started. Other demo databases still need their own backup and migration. PostgreSQL, production deployment, and target-environment CORS remain unverified. CSV import/export and reassignment approval still need browser walkthroughs; live updates, predicted wait times, revenue history, and combined-table bookings are not implemented.
+
+See the [final readiness audit](docs/FINAL_READINESS_AUDIT.md) for evidence and the [feature gap audit](docs/FEATURE_GAP_AUDIT.md) for the feature-by-feature status.
+
+Occupie is a restaurant seating operations prototype for coordinating tables, reservations, walk-ins, and service updates. It provides separate workspaces for managers, hosts, floor staff, and customers.
 
 > **📚 New to Occupie?** See [DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md) for a complete guide to all documentation, or jump to [DEMO_RESOURCES.md](DEMO_RESOURCES.md) for presentation materials.
 

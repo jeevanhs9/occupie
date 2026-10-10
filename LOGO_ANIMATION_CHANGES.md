@@ -1,4 +1,6 @@
-# Logo Animation Implementation - Native React/SVG
+# Historical Logo Animation Implementation Note
+
+> This file records an earlier native React/SVG implementation and is not the current landing-page implementation. The active path is `LandingPage` → `CinematicScene` → `BrandAnimation` → `LogoFrameAnimation`, using the supplied logo frame sequence. The unused native implementation files were removed after reference checks; original public assets were retained. See [`docs/CLEANUP_REPORT.md`](docs/CLEANUP_REPORT.md) for current cleanup evidence.
 
 ## Overview
 

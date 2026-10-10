@@ -67,7 +67,7 @@ The backend supports restaurant selection, but the current browser client sends 
 | Models | User, restaurant/membership, table, reservation, waitlist, revoked token and audit event | `backend/app/models/` |
 | Schema history | Alembic revisions for original-schema upgrade, membership backfill, audit events, constraint cleanup, duplicate booking constraint | `backend/migrations/versions/` |
 
-`backend/app/__init__.py` registers the operational blueprint at `/api/v1`, auth at `/api/auth`, and the health blueprint at both `/api` and `/api/v1`. The older `backend/app/routes/allocations.py`, `reservations.py`, and `tables.py` modules are not registered. Their routes are not current public API contracts; the registered operations routes supersede them.
+`backend/app/__init__.py` registers the operational blueprint at `/api/v1`, auth at `/api/auth`, and the health blueprint at both `/api` and `/api/v1`. The older, unregistered route modules were removed during the cleanup documented in [`CLEANUP_REPORT.md`](CLEANUP_REPORT.md); the registered operations routes remain the current public API contract.
 
 ## Database model and relationships
 
@@ -86,7 +86,7 @@ The backend supports restaurant selection, but the current browser client sends 
 
 Current status values are `available`, `occupied`, `reserved`, `cleaning` for tables; `confirmed`, `checked_in`, `seated`, `completed`, `cancelled`, `no_show` for reservations; and `waiting`, `ready`, `seated`, `cancelled` for waitlist entries. The allowed table state transitions are enforced by the operations API. Floor-staff rows/actions are scoped to tables whose free-form `assigned_server` exactly matches the authenticated user's display name.
 
-Migrations are present through `a6b7c8d9e012`. The two latest revisions add operating settings/lifecycle timestamps and reassignment requests. A fresh SQLite migration to this head passed in the audit scratch database. The existing local database was not migrated or altered; apply `flask --app run db upgrade` against the intended database before using the changed paths. Production PostgreSQL migration behavior was not tested.
+Migrations are present through `a6b7c8d9e012`. The two latest revisions add operating settings/lifecycle timestamps and reassignment requests. Fresh and populated SQLite migrations passed in scratch databases. The default local SQLite database was subsequently backed up and migrated from `e880f4e1dce4` to this head; other intended databases still need their own backup and upgrade. Production PostgreSQL migration behavior was not tested.
 
 ## Current operational limits
 

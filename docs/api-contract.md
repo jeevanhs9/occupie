@@ -2,7 +2,7 @@
 
 **Base URLs:** auth `/api/auth`; operational API `/api/v1`. During local development the Vite server proxies these paths to Flask at `http://127.0.0.1:5000`. JSON is used for request and response bodies unless a row says otherwise.
 
-This file reflects the registered blueprints in `backend/app/__init__.py`. The older `backend/app/routes/allocations.py`, `reservations.py`, and `tables.py` files are not registered and are not current contracts. The underscore-named `API_CONTRACT.md` is a legacy document; this hyphenated file is the audited contract.
+This file reflects the registered blueprints in `backend/app/__init__.py`. The older route modules `allocations.py`, `reservations.py`, and `tables.py` were unregistered and have been removed as part of the cleanup documented in [`CLEANUP_REPORT.md`](CLEANUP_REPORT.md). The underscore-named `API_CONTRACT.md` is a legacy document; this hyphenated file is the audited contract.
 
 ## Request/session rules
 
@@ -143,4 +143,4 @@ Manager or host. Optional body `{ "tableId": "T01" }`; otherwise the API allocat
 
 Operational validation errors use 422 and include `error`, `message`, `status_code`, `service`, and optional `fields`. Role/ownership failures use 403; authentication failures use 401; missing tenant/resource uses 404; conflict/business rules use 409. Auth handlers return `{ "message": ... }` and status codes; do not assume every endpoint has the operational `fields` envelope.
 
-There is no registered analytics/revenue/report endpoint, notification endpoint, live event stream, wait-time prediction endpoint, multi-table allocation contract, automatic late-arrival/no-show endpoint, or restaurant-selection workflow in the current frontend. The files `backend/app/routes/allocations.py`, `reservations.py`, and `tables.py` contain legacy route definitions but are not registered by the Flask app.
+There is no registered analytics/revenue/report endpoint, notification endpoint, live event stream, wait-time prediction endpoint, multi-table allocation contract, automatic late-arrival/no-show endpoint, or restaurant-selection workflow in the current frontend. The active table, reservation, and allocation endpoints are implemented by the registered `operations.py` blueprint.

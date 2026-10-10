@@ -89,7 +89,7 @@ Auth requests derive `/api/auth` from `VITE_API_BASE_URL`, so sign-in and operat
 
 The migration chain currently ends at `a6b7c8d9e012`. The two latest revisions add restaurant allocation settings and reservation lifecycle timestamps, then manager-reviewed reservation reassignment records. They are additive; the application requires these revisions before using the new settings, reports, completion, or reassignment paths. Check status with `flask --app run db current` and inspect future changes with `flask --app run db migrate -m "description"` before applying them.
 
-The app does not create tables automatically at startup. Run `flask --app run db upgrade` against the intended database before starting the API. This keeps new and existing databases on the same Alembic migration path. Back up the intended database before production migrations. This audit validated a fresh SQLite upgrade and an upgrade from a populated scratch database at `e880f4e1dce4`; it did not migrate the existing local database or validate PostgreSQL migration behavior.
+The app does not create tables automatically at startup. Run `flask --app run db upgrade` against the intended database before starting the API. This keeps new and existing databases on the same Alembic migration path. Back up the intended database before migration. In a follow-up on 2026-10-11, the default local SQLite database was backed up to `backend/instance/occupie_dev.before-run-20261011-034400.db` and migrated from `e880f4e1dce4` to `a6b7c8d9e012`. PostgreSQL migration behavior remains unverified.
 
 ## Authentication
 
