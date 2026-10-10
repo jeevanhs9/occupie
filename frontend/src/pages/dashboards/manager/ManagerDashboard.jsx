@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { PageEntrance } from '../../../components/ui/PageEntrance';
 import { StatCard } from '../../../components/ui/StatCard';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../../components/ui/Card';
 import { Badge } from '../../../components/ui/Badge';
@@ -79,7 +80,7 @@ export function ManagerDashboard() {
   };
 
   return (
-    <div className="space-y-6 sm:space-y-8">
+    <PageEntrance className="space-y-6 sm:space-y-8">
       {/* Top Welcome & Quick Actions */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -388,7 +389,7 @@ export function ManagerDashboard() {
           </div>
         </>
       )}
-    </div>
+    </PageEntrance>
   );
 }
 

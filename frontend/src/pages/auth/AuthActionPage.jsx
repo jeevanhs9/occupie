@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Logo } from '../../components/common/Logo';
+import { PageEntrance } from '../../components/ui/PageEntrance';
 import { apiService } from '../../services/api';
 
 const copy = {
@@ -46,9 +47,13 @@ export function AuthActionPage() {
     if (kind === '/auth/register') {
       result = await apiService.auth.register({ name, email, password });
       if (result.success) {
-        setMessage(result.data.verificationEmailSent
-          ? result.data.message
-          : `${result.data.message} Email delivery is not configured yet; check the backend development log for the verification link.`);
+        if (result.data.verificationEmailSent) {
+          setMessage(result.data.message);
+        } else if (result.data.deliveryConfigured) {
+          setMessage('Your account was created, but the verification email could not be delivered. Check the SMTP settings and try sending the link again.');
+        } else {
+          setMessage(`${result.data.message} Email delivery is not configured yet; check the backend development log for the verification link.`);
+        }
       }
     } else if (kind === '/auth/forgot-password') {
       result = await apiService.auth.forgotPassword(email);
@@ -65,10 +70,10 @@ export function AuthActionPage() {
   };
 
   return (
-    <div className="auth-page min-h-screen flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <PageEntrance className="auth-page min-h-screen flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="mx-auto w-full max-w-md">
         <header className="mb-8 text-center">
-          <Link to="/" className="inline-block mb-4"><Logo size="lg" theme="light" /></Link>
+          <Link to="/" className="inline-block mb-4"><Logo size="lg" theme="light" withLink={false} /></Link>
           <p className="auth-eyebrow mb-2">Occupie account security</p>
           <h1 className="auth-heading text-3xl">{heading}</h1>
           <p className="mt-2 text-sm text-stone-300">{description}</p>
@@ -88,7 +93,7 @@ export function AuthActionPage() {
           <p className="mt-6 border-t border-stone-700 pt-5 text-center text-sm text-stone-300"><Link to="/auth/login" className="text-amber-200 underline">Return to sign in</Link></p>
         </div>
       </div>
-    </div>
+    </PageEntrance>
   );
 }
 

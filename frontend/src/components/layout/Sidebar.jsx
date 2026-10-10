@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useRole } from '../../hooks/useRole';
 import { ROLE_NAVIGATION, ROLE_CONFIGS } from '../../lib/constants';
@@ -51,6 +51,7 @@ export function Sidebar({ isOpen, onClose }) {
   const { currentRole, user, roleConfig, logout, isDemoMode } = useRole();
   const navigate = useNavigate();
   const location = useLocation();
+  const [logoutError, setLogoutError] = useState('');
   const navItems = ROLE_NAVIGATION[currentRole] || [];
 
   return (
@@ -131,6 +132,7 @@ export function Sidebar({ isOpen, onClose }) {
 
         {/* User Card & Logout */}
         <div className="p-4 border-t border-occupie-navy-800 bg-occupie-navy-950/40">
+          {logoutError && <p role="alert" className="mb-2 text-xs text-rose-200">{logoutError}</p>}
           <div className="flex items-center gap-3 p-2 rounded-xl bg-occupie-navy-850/80 border border-occupie-navy-800">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-occupie-cyan-600 to-occupie-teal-500 text-white font-bold text-sm flex items-center justify-center shadow-sm">
               {user?.name?.charAt(0) || 'U'}
@@ -141,7 +143,7 @@ export function Sidebar({ isOpen, onClose }) {
             </div>
             {isDemoMode ? <Link to="/auth/demo-roles" title="Switch preview role" className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-occupie-navy-800 transition-colors">
               <LogOut className="w-4 h-4" />
-            </Link> : <button type="button" onClick={async () => { await logout(); navigate('/auth/login', { replace: true }); }} title="Sign out" aria-label="Sign out" className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-occupie-navy-800 transition-colors">
+            </Link> : <button type="button" onClick={async () => { setLogoutError(''); const result = await logout(); if (result.success) navigate('/auth/login', { replace: true }); else setLogoutError(result.error || 'Could not sign out. Try again.'); }} title="Sign out" aria-label="Sign out" className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-occupie-navy-800 transition-colors">
               <LogOut className="w-4 h-4" />
             </button>}
           </div>

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { PageEntrance } from '../../../components/ui/PageEntrance';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../../components/ui/Card';
 import { StatCard } from '../../../components/ui/StatCard';
 import { Badge } from '../../../components/ui/Badge';
@@ -84,7 +85,7 @@ export function HostDashboard() {
   };
 
   return (
-    <div className="space-y-6 sm:space-y-8">
+    <PageEntrance className="space-y-6 sm:space-y-8">
       {/* Header and Quick CTAs */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -318,7 +319,7 @@ export function HostDashboard() {
           </Card>
         </div>
       </div>
-    </div>
+    </PageEntrance>
   );
 }
 

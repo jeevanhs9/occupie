@@ -22,7 +22,7 @@ function LuxuryNavigation({ menuOpen, setMenuOpen, scrolled, reduceMotion }) {
         </nav>
         <div className="luxury-actions">
           <Link to="/auth/login" className="text-action">Sign in</Link>
-          <Link to="/auth/demo-roles" className="gold-action">Enter the workspace <ArrowUpRight size={15} /></Link>
+          <Link to="/auth/login" className="gold-action">Enter the workspace <ArrowUpRight size={15} /></Link>
         </div>
         <button className="menu-toggle" onClick={() => setMenuOpen((open) => !open)} aria-expanded={menuOpen} aria-label="Toggle navigation">
           {menuOpen ? <X size={20} /> : <Menu size={21} />}
@@ -32,7 +32,7 @@ function LuxuryNavigation({ menuOpen, setMenuOpen, scrolled, reduceMotion }) {
         {menuOpen && <motion.nav className="mobile-nav" initial={reduceMotion ? false : { opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={reduceMotion ? undefined : { opacity: 0, y: -8 }} aria-label="Mobile navigation">
           {links.map(([label, target]) => <button key={target} onClick={() => goTo(target)}>{label}</button>)}
           <Link to="/auth/login" onClick={() => setMenuOpen(false)}>Sign in</Link>
-          <Link to="/auth/demo-roles" onClick={() => setMenuOpen(false)}>Enter the workspace</Link>
+          <Link to="/auth/login" onClick={() => setMenuOpen(false)}>Enter the workspace</Link>
         </motion.nav>}
       </AnimatePresence>
     </header>
@@ -60,7 +60,7 @@ export function LandingPage() {
           <p className="eyebrow">Make room for remarkable service</p>
           <h2>Let every guest feel expected.</h2>
           <p>Explore the Occupie role demo and see how the dining room stays in step.</p>
-          <Link to="/auth/demo-roles" className="gold-action">Enter the workspace <ArrowUpRight size={16} /></Link>
+          <Link to="/auth/login" className="gold-action">Enter the workspace <ArrowUpRight size={16} /></Link>
         </section>
       </main>
       <footer className="luxury-footer">

@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta, timezone
+from app.models import AuditEvent, RestaurantTable
+from app.extensions import db
 
 
 def create_table(manager_client, table_id, capacity, status='available'):
@@ -77,6 +79,7 @@ def test_reservation_create_and_seat_updates_table(manager_client):
     assert response.status_code == 201
     reservation = response.get_json()['reservation']
     assert reservation['table'] == 'T01'
+    assert reservation['restaurantName'] == 'Test Restaurant'
 
     response = manager_client.patch(f"/api/v1/reservations/{reservation['id']}/status", json={'status': 'seated'})
     assert response.status_code == 200
@@ -126,3 +129,22 @@ def test_invalid_walk_in_and_allocation_inputs_return_validation_errors(manager_
 
     invalid_recommendation = manager_client.get('/api/v1/allocations/recommend?party_size=0')
     assert invalid_recommendation.status_code == 422
+
+
+def test_operational_changes_record_actor_and_timestamps(manager_client, app):
+    create_table(manager_client, 'T01', 4)
+    starts_at = datetime.now(timezone.utc) + timedelta(hours=2)
+    reservation = manager_client.post('/api/v1/reservations', json={
+        'guestName': 'Audit Guest', 'partySize': 2, 'startsAt': starts_at.isoformat(),
+    }).get_json()['reservation']
+    manager_client.patch(f"/api/v1/reservations/{reservation['id']}/status", json={'status': 'checked_in'})
+
+    with app.app_context():
+        table = db.session.get(RestaurantTable, 'T01')
+        events = AuditEvent.query.order_by(AuditEvent.id).all()
+        assert table.created_at is not None
+        assert table.updated_at is not None
+        assert [event.action for event in events] == [
+            'table.created', 'reservation.created', 'reservation.status_changed',
+        ]
+        assert all(event.actor_user_id is not None for event in events)

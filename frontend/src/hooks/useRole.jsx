@@ -53,8 +53,12 @@ export function RoleProvider({ children }) {
 
   const logout = async () => {
     const result = await apiService.auth.logout();
-    setUser(null);
-    setAuthError(null);
+    if (result.success) {
+      setUser(null);
+      setAuthError(null);
+    } else {
+      setAuthError(result.error);
+    }
     return result;
   };
 

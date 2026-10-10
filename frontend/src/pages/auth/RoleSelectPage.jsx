@@ -4,6 +4,7 @@ import { useRole } from '../../hooks/useRole';
 import { ROLES, ROLE_CONFIGS } from '../../lib/constants';
 import { Logo } from '../../components/common/Logo';
 import { Badge } from '../../components/ui/Badge';
+import { PageEntrance } from '../../components/ui/PageEntrance';
 import {
   ShieldCheck,
   UserCheck,
@@ -31,11 +32,7 @@ export function RoleSelectPage() {
   };
 
   return (
-<<<<<<< Updated upstream
-    <div className="role-sandbox-page min-h-screen py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden flex flex-col justify-center">
-=======
-    <div className="auth-page min-h-screen text-slate-100 py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden flex flex-col justify-center">
->>>>>>> Stashed changes
+    <PageEntrance className="auth-page min-h-screen text-slate-100 py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden flex flex-col justify-center">
       {/* Background ambient lighting */}
       <div className="ambient-orb absolute top-1/3 left-1/2 -translate-x-1/2 w-[700px] h-[700px] bg-occupie-teal-500/10 rounded-full blur-[160px] pointer-events-none" />
 
@@ -67,7 +64,7 @@ export function RoleSelectPage() {
           <div className="mt-4 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30 text-xs">
             <ShieldAlert className="w-4 h-4 text-amber-400" />
             <span>
-              <strong>Demo Environment Only:</strong> Server-side JWT authentication & role authorization will be enforced in Phase 2.
+                <strong>Demo Environment Only:</strong> Preview actions use temporary sample data. Real accounts use server-side access controls.
             </span>
           </div>
         </div>
@@ -119,7 +116,7 @@ export function RoleSelectPage() {
           </Link>
         </div>
       </div>
-    </div>
+    </PageEntrance>
   );
 }
 

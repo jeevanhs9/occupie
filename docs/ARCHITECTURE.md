@@ -1,69 +1,50 @@
 # Occupie Architecture
 
-## Scope
+## Stack and request flow
 
-The current project is a hackathon-ready demo with two data modes:
-
-- **Demo mode** is the default. React pages use labeled in-memory fixtures; edits disappear after reload.
-- **API mode** (`VITE_DATA_MODE=api`) loads and mutates persisted Flask data. API errors remain visible and do not fall back to fixtures.
-
-Role selection is for preview only. The backend currently has no login, token issuance, or role authorization.
-
-## Request and data flow
+Occupie uses React, Vite, Tailwind CSS, and React Router in the browser, with Flask, Flask-CORS, SQLAlchemy, and Flask-Migrate on the server. PostgreSQL is the deployment database; development and default tests can use SQLite.
 
 ```text
-React route → role dashboard → useOperationalData → apiService → Flask /api/v1
-                        ↘ demo fixtures + deterministic browser preview rules
-Flask route → validation → allocation service (where needed) → SQLAlchemy models → SQLite/PostgreSQL
+React route → role dashboard → useOperationalData → apiService
+                                         ↓ credentialed requests + CSRF header
+Flask /api/auth and /api/v1 → JWT cookie validation → membership/ownership checks
+                                         ↓
+                           SQLAlchemy → PostgreSQL or local SQLite
 ```
 
-The frontend uses `src/services/api.js` for URL construction, JSON requests, and consistent failure results. `src/hooks/useOperationalData.jsx` selects the configured source and owns page-level operational state. A failed API request is not treated as success and does not switch modes.
+`frontend/src/services/api.js` sends HTTP-only cookie sessions with credentialed requests, reads the separate CSRF cookie for mutating requests, and attempts refresh after an expired access token. `useRole.jsx` restores the user from the server; in API mode, the browser does not select or store an operational role. The explicit demo mode keeps fixture data for previews.
 
-The Flask factory in `backend/app/__init__.py` configures SQLAlchemy, Flask-Migrate, JWT, JSON error handlers, a configured frontend-origin CORS allowlist, and versioned blueprints. Operational endpoints are in `app/routes/operations.py`. Domain behavior lives in `app/services/allocation.py`; models are under `app/models/`.
+## Authentication and authorization
 
-## Models
+- Public signup creates a customer only and requires email verification before login.
+- Passwords are hashed with Werkzeug's scrypt implementation. Reset and verification tokens are random, expiring, and stored as SHA-256 hashes.
+- Access and refresh JWTs are HTTP-only, SameSite=Lax cookies. Mutating cookie-authenticated routes require the matching CSRF token header.
+- Logout revokes both token IDs. Password reset increments `auth_version`, invalidating existing sessions.
+- Login, registration, verification, and reset endpoints have Flask-Limiter rules. Production requires shared rate-limit storage.
+- Staff roles are restaurant memberships, provisioned from the trusted `flask provision-staff` CLI. Public signup cannot assign those roles.
+- Every operations request requires an authenticated user and checks the selected restaurant membership. Customer reservation lists and changes are scoped to that customer; staff roles have operation-specific permissions.
 
-- `User`: hashed-password and role model used by basic register, login, and token introspection endpoints under `/api/auth`.
-- `RestaurantTable`: capacity, section, current status, seated party, and server assignment.
-- `Reservation`: guest, party size, start time, table assignment, preference, and lifecycle status.
-- `WaitlistEntry`: walk-in party, status, enqueue time, and optional assigned table.
+## Models and migrations
 
-`run.py` calls `db.create_all()` for development. This creates missing tables but does not migrate existing schemas. Flask-Migrate is installed; the initial Alembic migration still needs to be generated and reviewed before production.
+The SQLAlchemy models live in `backend/app/models/`:
 
-## Allocation rule
+- `User`: password hash, email verification/reset state, and session version.
+- `Restaurant` and `RestaurantMembership`: tenant ownership and staff role assignment.
+- `RestaurantTable`: capacity, section, occupancy, and server assignment.
+- `Reservation`: guest, time, customer owner, table assignment, preference, and status.
+- `WaitlistEntry`: walk-in queue, creator, time, optional table assignment, and status.
+- `RevokedToken`: invalidated JWT IDs and their expiry.
 
-The current rule is small and deterministic:
+The initial Alembic revision creates a fresh schema and upgrades the original local schema without dropping its records. Use `flask db upgrade` for schema setup and rollout. Development `create_all()` is retained only as an empty-database convenience.
 
-1. Filter to tables with `available` status and capacity at least the party size.
-2. Exclude tables whose confirmed or checked-in reservation overlaps the party's 90-minute protection window.
-3. Prefer the requested section if it has an eligible table.
-4. Choose the table with the least unused capacity, then table ID for stable tie-breaking.
-5. When seating a waitlist, consider entries in arrival order and seat the first party with an eligible table; an older party that cannot fit does not block a smaller party.
+## Operations and allocation
 
-This strategy does not combine tables, forecast clear times, optimize an entire shift, or promise waiting times. Reservation protection defaults to 90 minutes on either side of the requested seating time.
+The versioned API routes are in `backend/app/routes/operations.py`; deterministic allocation rules are in `backend/app/services/allocation.py`. The allocator selects the smallest suitable available table, uses section as a preference, and protects confirmed/checked-in reservations for the 90-minute window. Reservation creation locks candidate table rows in PostgreSQL before checking conflicts and assigning a table. SQLite ignores row locks, so concurrency guarantees require PostgreSQL.
 
-## API mode and persistence
+Occupancy, reservation status, and waitlist seating are validated on the backend. Waitlist seating chooses the oldest party that currently has a suitable table. No wait-time prediction is returned when the app lacks validated turnover data.
 
-The database URL comes from backend environment config. Development uses local SQLite if `DATABASE_URL` is blank and PostgreSQL if set. Tests use in-memory SQLite. The frontend API base URL comes from `VITE_API_BASE_URL`.
+## Existing routes
 
-Implemented API resources:
+The four dashboard routes remain under `/dashboard/manager`, `/dashboard/host`, `/dashboard/floor-staff`, and `/dashboard/customer`. The older health route remains available at `/api/health`; the versioned health route and protected operations are under `/api/v1`.
 
-- `/health`
-- `/tables` and table status updates
-- `/reservations` and reservation lifecycle updates
-- `/waitlist` and waitlist seating/status updates
-- `/allocations/recommend`
-
-See [API_CONTRACT.md](API_CONTRACT.md) for schemas and validation.
-
-## Security boundary
-
-The frontend login preview and role switcher are client-side only. Basic JWT endpoints exist under `/api/auth`, but the frontend does not use them, operational endpoints accept unauthenticated requests, and no role or restaurant authorization is enforced. The API is suitable for local demos, not public deployment. Production configuration refuses to start without strong Flask and JWT secrets plus a PostgreSQL database URL.
-
-## Planned work
-
-1. Add reviewed database migrations and production WSGI deployment configuration.
-2. Implement authentication and server-enforced restaurant/role permissions.
-3. Add analytics, historical turnover, and revenue only when supported by persisted source data.
-4. Add realtime update delivery and notifications if required by restaurant operations.
-5. Improve allocation with service-duration and multi-table rules, then validate the results against restaurant data.
+See [SETUP.md](SETUP.md) for local and production configuration, and [API_CONTRACT.md](API_CONTRACT.md) for endpoint details.

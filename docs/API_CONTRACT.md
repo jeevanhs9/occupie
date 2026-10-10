@@ -1,104 +1,123 @@
 # Occupie API Contract
 
-Base URL: `http://localhost:5000/api/v1`
+Operations base URL: `http://localhost:5000/api/v1`
 
-Requests and responses use JSON. Operations persist through SQLAlchemy. The current demo API has no authentication or role authorization and must not be exposed to untrusted clients.
+Authentication base URL: `http://localhost:5000/api/auth`
+
+Requests and responses use JSON. Authentication uses HTTP-only access and refresh cookies. The frontend must send credentials and include the CSRF token from `occupie_csrf_access` as `X-CSRF-TOKEN` on mutating authenticated requests. Refresh requests use `occupie_csrf_refresh`. Cross-origin clients must use an origin in `FRONTEND_ORIGINS` and `credentials: include`.
+
+## Authentication
+
+### `POST /register`
+
+Accepts `name`, `email`, and a 12–128 character password. Always creates a customer account, regardless of any supplied role property. Returns 201 and whether verification email delivery succeeded. Email verification is required before login.
+
+### `POST /verify`
+
+Accepts `{ "token": "..." }`. Verifies an unexpired email token. Verification tokens expire after 24 hours and can be used once.
+
+### `POST /resend-verification`
+
+Accepts an email address. Returns the same generic response whether or not the account exists.
+
+### `POST /login`
+
+Accepts email and password. On success, sets HTTP-only access and refresh cookies and returns the user profile. Tokens are not returned in JSON. Unverified accounts receive 403.
+
+### `POST /refresh`
+
+Requires a valid refresh cookie and CSRF token. Rotates both cookies and revokes the consumed refresh token.
+
+### `POST /logout`
+
+Requires a valid access cookie and CSRF token. Revokes access and refresh token IDs and expires auth cookies.
+
+### `GET /me`
+
+Returns `{ "user": { ... } }` for the authenticated user. The profile role comes from the default restaurant membership, or is `customer` when no staff membership exists.
+
+### `POST /forgot-password`
+
+Accepts an email address and responds generically. Reset tokens expire after 30 minutes and are single use.
+
+### `POST /reset-password`
+
+Accepts `{ "token": "...", "password": "12–128 characters" }`. Updating the password invalidates previous sessions.
+
+### `GET /restaurants`
+
+Returns the available restaurant IDs and names for choosing a tenant where the current UI supports it.
+
+Registration, login, verification, and reset requests are rate-limited. When SMTP is not configured in local development, the backend logs verification/reset links and returns `verificationEmailSent: false`; it does not claim delivery. Production requires SMTP.
+
+## Authorization and tenant scope
+
+Every `/api/v1` operations request requires authentication. The server selects the tenant from `X-Restaurant-ID`, `restaurant_id`, a JSON `restaurantId`, or `DEFAULT_RESTAURANT_ID` in that order. Staff permissions come from a restaurant membership; public requests cannot create staff memberships. A user without a staff membership is treated as a customer.
+
+Customers can view table availability, create their own reservations, list only their own reservations, and check in to or cancel their own reservation. Customers cannot read staff waitlist data or perform staff operations. Manager, host, and floor staff permissions are checked on the server for each operation. Records are queried by restaurant ID; reservation operations also enforce customer ownership.
+
+Staff accounts are provisioned using `flask provision-staff` from a trusted backend terminal.
 
 ## Health
 
 ### `GET /health`
 
-Returns HTTP 200 with the service status, database connection state, implemented endpoint map, and remaining planned endpoint map. `status` is `degraded` when the database connection check fails; inspect `database.status` before using persisted operations.
+Available at `/api/health` and `/api/v1/health`. Returns service status and database readiness.
 
 ## Tables
 
 ### `GET /tables`
 
-Returns `{ "tables": [...] }`, ordered by table ID. Each table has `id`, `name`, `capacity`, `section`, `status`, `assignedServer`, `partySize`, and `timeSeated`.
+Returns `{ "tables": [...] }`, ordered by table ID. Customer results omit staff assignment and seating details.
 
 ### `POST /tables`
 
-Creates a table. `id`, `name`, `capacity`, and `section` are required; `status` defaults to `available`, and `assignedServer` is optional. Initial status may be `available`, `reserved`, or `cleaning`.
-
-```json
-{
-  "id": "T01",
-  "name": "Table 1",
-  "capacity": 4,
-  "section": "Window Patio",
-  "assignedServer": "Marco R."
-}
-```
-
-Returns `{ "table": ... }` with status 201.
+Manager only. Creates a table. `id`, `name`, and positive `capacity` are required; `section` defaults to `Main Dining`, and `assignedServer` is optional. Initial status can be `available`, `reserved`, or `cleaning`.
 
 ### `PATCH /tables/{id}/status`
 
-Accepts a valid `status` (`available`, `occupied`, `reserved`, `cleaning`). To set `occupied`, include a positive `partySize` no larger than the table capacity. Only a currently available table can be directly occupied. Non-occupied states clear the current party and seating time.
+Manager, host, or floor staff. Accepts status (`available`, `occupied`, `reserved`, `cleaning`). For `occupied`, include a positive `partySize` no larger than capacity. Other statuses clear current party and seating time.
 
 ## Reservations
 
 ### `GET /reservations`
 
-Returns `{ "reservations": [...] }`, ordered by start time. Reservation fields include `id`, `guestName`, `partySize`, `startsAt`, `table`, `status`, `phone`, `notes`, and `seatingPreference`.
+Returns `{ "reservations": [...] }` for the restaurant. Customer results are restricted to reservations they own.
 
 ### `POST /reservations`
 
-Requires a future ISO 8601 `startsAt`, non-empty `guestName`, and positive `partySize`. `seatingPreference`, `phone`, and `notes` are optional. Occupie assigns a suitable table or returns a conflict if none is available.
-
-```json
-{
-  "guestName": "Avery Example",
-  "partySize": 3,
-  "startsAt": "2026-10-10T20:00:00+05:30",
-  "seatingPreference": "Window Patio"
-}
-```
-
-Returns `{ "reservation": ... }` with status 201.
+Requires a future ISO 8601 `startsAt` and positive `partySize`. Staff must provide `guestName`; customer guest name is taken from the authenticated account. `seatingPreference`, `phone`, and `notes` are optional. The server selects a suitable table or returns 409 when none is available. A provided `tableId` is validated again during creation.
 
 ### `PATCH /reservations/{id}/status`
 
-Accepts `checked_in`, `seated`, `cancelled`, or `no_show`. Valid transitions are `confirmed` → one of those states and `checked_in` → `seated`, `cancelled`, or `no_show`. Seating also changes its assigned table to occupied.
+Accepts a valid transition to `checked_in`, `seated`, `cancelled`, or `no_show`. Customers may only check in to or cancel their own reservation. Seating updates the assigned table to occupied. Conflicts return 409.
 
 ## Allocation
 
 ### `GET /allocations/recommend?party_size=3&at=2026-10-10T20:00:00Z&preferred_section=Window%20Patio`
 
-Requires a positive integer `party_size`; `at` and `preferred_section` are optional. Returns `available`, a table `recommendation` or `null`, and the applied strategy. A valid request with no suitable table returns status 200 with `available: false`; it does not estimate a wait.
+Requires a positive integer `party_size`; `at` and `preferred_section` are optional. Returns `available`, a table `recommendation` or `null`, and the applied strategy. A valid request with no suitable table returns 200 with `available: false`; it does not estimate a wait.
 
-The current algorithm considers only available tables with enough seats, protects confirmed/checked-in reservations in a 90-minute window, honors a requested section when a suitable table exists there, then minimizes unused seats with table ID as a deterministic tie-breaker. It does not predict occupied-table turnover.
+The rule filters to available tables with enough seats, protects confirmed/checked-in reservation windows, treats section as a preference, then selects the smallest suitable table with a stable ID tie-breaker. It does not predict when occupied tables will clear.
 
 ## Waitlist
 
 ### `GET /waitlist`
 
-Returns active (`waiting` and `ready`) entries ordered oldest first. `waitMinutes` is calculated from `createdAt`; `quotedWait` is `null` because the service does not have validated turnover data.
+Manager, host, or floor staff. Returns active (`waiting`, `ready`) entries oldest first. Customers receive an empty list. `waitMinutes` is elapsed time and `quotedWait` is `null` because no validated estimate is implemented.
 
 ### `POST /waitlist`
 
-Requires a non-empty `partyName` and positive `partySize`; `contact` is optional. Returns `{ "waitlistEntry": ... }` with status 201. It does not promise a wait time.
+Manager or host. Requires non-empty `partyName` and positive `partySize`; `contact` is optional. Returns 201. It does not promise a wait time.
 
 ### `PATCH /waitlist/{id}`
 
-Accepts `waiting`, `ready`, or `cancelled`. Seating must use the dedicated endpoint so the table and queue update together.
+Manager or host. Sets status to `waiting`, `ready`, or `cancelled`. Seating must use the dedicated endpoint.
 
 ### `POST /waitlist/{id}/seat`
 
-Accepts an optional `{ "tableId": "T01" }`. Without a table ID, the service selects the smallest suitable available table. A party can be seated only if it is the oldest party in the queue that currently has a suitable table. The table becomes occupied and the waitlist record becomes seated in the same request.
+Manager or host. Accepts optional `{ "tableId": "T01" }`. Otherwise selects the smallest suitable available table. A party can be seated only when it is the oldest waiting party that currently has a suitable table. The table and waitlist record update in the same request.
 
-## Error format
+## Errors
 
-Operation errors include:
-
-```json
-{
-  "error": "Validation Error",
-  "message": "partySize must be a positive integer.",
-  "status_code": 422,
-  "service": "occupie-api",
-  "fields": { "partySize": "Enter a value greater than zero." }
-}
-```
-
-Business conflicts use 409; missing resources use 404; invalid input uses 422; malformed requests use 400. The application-level error handler also returns JSON for common HTTP errors. Basic register, login, and token introspection endpoints are available under `/api/auth`; `/api/v1` operational endpoints do not currently require a token or enforce roles.
+Authentication failures return 401; role or ownership failures return 403; missing records return 404; business conflicts return 409; invalid input returns 422. Operation errors include `error`, `message`, `status_code`, and optional field details.

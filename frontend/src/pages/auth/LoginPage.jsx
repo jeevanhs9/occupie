@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { Logo } from '../../components/common/Logo';
+import { PageEntrance } from '../../components/ui/PageEntrance';
 import { useRole } from '../../hooks/useRole';
+import { apiService } from '../../services/api';
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -10,6 +12,7 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [needsVerification, setNeedsVerification] = useState(false);
   const [loading, setLoading] = useState(false);
 
   if (isAuthenticated && !isDemoMode) return <Navigate to={roleConfig?.route || '/dashboard/customer'} replace />;
@@ -19,10 +22,12 @@ export function LoginPage() {
     setLoading(true);
     setError('');
     setMessage('');
+    setNeedsVerification(false);
     const result = await login({ email, password });
     setLoading(false);
     if (!result.success) {
       setError(result.error);
+      setNeedsVerification(result.data?.code === 'email_not_verified');
       return;
     }
     navigate(result.data.user.roleConfig?.route || ({
@@ -31,10 +36,21 @@ export function LoginPage() {
     }[result.data.user.role] || '/dashboard/customer'), { replace: true });
   };
 
-  if (isDemoMode) return <Navigate to={roleConfig?.route || '/dashboard/customer'} replace />;
+  const resendVerification = async () => {
+    setLoading(true);
+    setError('');
+    const result = await apiService.auth.resendVerification(email);
+    setLoading(false);
+    if (result.success) setMessage(result.data.deliveryConfigured
+      ? result.data.message
+      : 'Email delivery is not configured yet; check the backend development log for the verification link.');
+    else setError(result.error);
+  };
+
+
 
   return (
-    <div className="auth-page min-h-screen flex flex-col justify-center py-12 sm:px-6 lg:px-8 relative overflow-hidden">
+    <PageEntrance className="auth-page min-h-screen flex flex-col justify-center py-12 sm:px-6 lg:px-8 relative overflow-hidden">
       <div className="absolute top-6 left-6 z-20"><Link to="/" className="auth-back inline-flex items-center gap-2 text-xs font-semibold transition-colors px-3 py-1.5">← <span>Back to Home</span></Link></div>
       <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10 px-4">
         <div className="text-center mb-8">
@@ -46,6 +62,7 @@ export function LoginPage() {
         <div className="auth-card rounded-2xl p-6 sm:p-8">
           {error && <p role="alert" className="mb-4 rounded border border-red-400/30 bg-red-950/30 p-3 text-sm text-red-200">{error}</p>}
           {message && <p role="status" className="mb-4 rounded border border-amber-400/30 bg-amber-950/20 p-3 text-sm text-amber-100">{message}</p>}
+          {needsVerification && <button className="mb-4 text-sm text-amber-200 underline" type="button" disabled={loading} onClick={resendVerification}>Resend verification email</button>}
           <form onSubmit={submit} className="space-y-4">
             <label className="block text-sm text-slate-200">Email address<input required autoComplete="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="mt-1 block w-full rounded border border-stone-600 bg-stone-950 px-3 py-2 text-white" /></label>
             <label className="block text-sm text-slate-200">Password<input required autoComplete="current-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="mt-1 block w-full rounded border border-stone-600 bg-stone-950 px-3 py-2 text-white" /></label>
@@ -56,7 +73,7 @@ export function LoginPage() {
           {isDemoMode && <Link to="/auth/demo-roles">Open demo role preview</Link>}
         </div>
       </div>
-    </div>
+    </PageEntrance>
   );
 }
 

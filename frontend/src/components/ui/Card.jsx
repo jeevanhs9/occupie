@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 
 export function Card({
   children,
@@ -7,16 +8,20 @@ export function Card({
   glass = false,
   ...props
 }) {
+  const reducedMotion = useReducedMotion();
   return (
-    <div
+    <motion.div
       className={`rounded-xl border transition-all duration-200
         ${glass ? 'glass-card-light' : 'bg-occupie-cream border-stone-200 shadow-card'}
         ${hoverEffect ? 'hover:shadow-card-hover hover:border-occupie-brass-400/70' : ''}
         ${className}`}
+      initial={reducedMotion ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={reducedMotion ? { duration: 0 } : { duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
       {...props}
     >
       {children}
-    </div>
+    </motion.div>
   );
 }
 

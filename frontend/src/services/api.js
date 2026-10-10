@@ -62,7 +62,7 @@ export const authService = {
   resendVerification: (email) => authRequest('/resend-verification', jsonRequest('POST', { email })),
   forgotPassword: (email) => authRequest('/forgot-password', jsonRequest('POST', { email })),
   resetPassword: (token, password) => authRequest('/reset-password', jsonRequest('POST', { token, password })),
-  logout: () => authRequest('/logout', jsonRequest('POST')),
+  logout: () => authRequest('/logout', jsonRequest('POST'), 'occupie_csrf_refresh'),
 };
 
 export const apiService = {

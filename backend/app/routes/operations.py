@@ -12,6 +12,7 @@ from app.models import (
     WaitlistEntry,
     Restaurant,
     RestaurantMembership,
+    AuditEvent,
     TABLE_STATUSES,
     RESERVATION_STATUSES,
     WAITLIST_STATUSES,
@@ -50,7 +51,9 @@ def require_role_and_restaurant():
             {'manager'} if path == '/tables' else {'manager', 'host', 'floor_staff'}
         )
     elif path.startswith('/reservations'):
-        allowed = {'manager', 'host', 'floor_staff', 'customer'}
+        allowed = {'manager', 'host', 'floor_staff', 'customer'} if request.method == 'GET' else (
+            {'manager', 'host', 'customer'}
+        )
     elif path.startswith('/waitlist'):
         allowed = {'manager', 'host', 'floor_staff', 'customer'} if request.method == 'GET' else {'manager', 'host'}
     elif path.startswith('/allocations'):
@@ -115,6 +118,17 @@ def _commit_or_conflict():
     except IntegrityError:
         db.session.rollback()
         return _error('A record with that identifier already exists.', 409)
+
+
+def _record_audit(entity_type, entity_id, action, details=None):
+    db.session.add(AuditEvent(
+        restaurant_id=g.restaurant_id,
+        actor_user_id=g.occupie_user.id,
+        entity_type=entity_type,
+        entity_id=str(entity_id),
+        action=action,
+        details=details or {},
+    ))
 
 
 def _table_by_id(table_id, lock=False):
@@ -211,6 +225,7 @@ def tables_collection():
         assigned_server=assigned_server.strip() if assigned_server else None,
     )
     db.session.add(table)
+    _record_audit('table', table.id, 'table.created', {'capacity': capacity, 'section': section.strip()})
     conflict = _commit_or_conflict()
     if conflict:
         return conflict
@@ -244,7 +259,11 @@ def update_table_status(table_id):
         table.party_size = 0
         table.time_seated = None
 
+    previous_status = table.status
     table.status = status
+    _record_audit('table', table.id, 'table.status_changed', {
+        'from': previous_status, 'to': status, 'partySize': table.party_size,
+    })
     db.session.commit()
     return jsonify({'table': table.to_dict()}), 200
 
@@ -286,6 +305,14 @@ def reservations_collection():
     if notes is not None and (not isinstance(notes, str) or len(notes) > 500):
         return _error('notes must be a string of 500 characters or fewer.', 422, {'notes': 'Invalid value.'})
     requested_table_id = payload.get('tableId')
+    customer_id = g.occupie_user.id if g.occupie_role == 'customer' else None
+    if customer_id and Reservation.query.filter(
+        Reservation.restaurant_id == g.restaurant_id,
+        Reservation.customer_id == customer_id,
+        Reservation.starts_at == starts_at,
+        Reservation.status.in_(('confirmed', 'checked_in', 'seated')),
+    ).first():
+        return _error('You already have an active reservation at that time.', 409)
     if requested_table_id is not None and not isinstance(requested_table_id, str):
         return _error('tableId must be a table identifier string.', 422, {'tableId': 'Invalid table.'})
     if requested_table_id:
@@ -302,7 +329,7 @@ def reservations_collection():
     reservation = Reservation(
         id=f"RES-{uuid4().hex[:8].upper()}",
         restaurant_id=g.restaurant_id,
-        customer_id=g.occupie_user.id if g.occupie_role == 'customer' else None,
+        customer_id=customer_id,
         guest_name=guest_name.strip(),
         party_size=party_size,
         starts_at=starts_at,
@@ -313,6 +340,9 @@ def reservations_collection():
         preferred_section=preferred_section.strip() if preferred_section and preferred_section.strip() else None,
     )
     db.session.add(reservation)
+    _record_audit('reservation', reservation.id, 'reservation.created', {
+        'partySize': party_size, 'tableId': table.id, 'startsAt': starts_at.isoformat(),
+    })
     conflict = _commit_or_conflict()
     if conflict:
         return conflict
@@ -345,6 +375,7 @@ def update_reservation_status(reservation_id):
         return _error('Customers may only check in to or cancel their own reservation.', 403)
     if status == reservation.status:
         return jsonify({'reservation': reservation.to_dict()}), 200
+    previous_status = reservation.status
     if status == 'seated':
         table = _table_by_id(reservation.table_id, lock=True) if reservation.table_id else None
         if table is None or not _is_table_available_for_party(
@@ -354,10 +385,17 @@ def update_reservation_status(reservation_id):
             exclude_reservation_id=reservation.id,
         ):
             return _error('The reservation table is not available for seating because it is occupied, too small, or protected for another reservation.', 409)
+        previous_table_status = table.status
         table.status = 'occupied'
         table.party_size = reservation.party_size
         table.time_seated = datetime.now(timezone.utc)
+        _record_audit('table', table.id, 'table.status_changed', {
+            'from': previous_table_status, 'to': 'occupied', 'partySize': table.party_size,
+        })
     reservation.status = status
+    _record_audit('reservation', reservation.id, 'reservation.status_changed', {
+        'from': previous_status, 'to': status,
+    })
     db.session.commit()
     return jsonify({'reservation': reservation.to_dict()}), 200
 
@@ -397,6 +435,7 @@ def waitlist_collection():
         contact=contact.strip() if contact and contact.strip() else None,
     )
     db.session.add(entry)
+    _record_audit('waitlist', entry.id, 'waitlist.created', {'partySize': party_size})
     db.session.commit()
     return jsonify({'waitlistEntry': entry.to_dict()}), 201
 
@@ -412,7 +451,17 @@ def update_waitlist_entry(entry_id):
     status = payload.get('status')
     if status not in WAITLIST_STATUSES or status == 'seated':
         return _error('status must be waiting, ready, or cancelled.', 422, {'status': 'Invalid status.'})
+    allowed_transitions = {
+        'waiting': {'ready', 'cancelled'},
+        'ready': {'waiting', 'cancelled'},
+        'cancelled': set(),
+        'seated': set(),
+    }
+    if status != entry.status and status not in allowed_transitions[entry.status]:
+        return _error(f'A waitlist entry cannot move from {entry.status} to {status}.', 409)
+    previous_status = entry.status
     entry.status = status
+    _record_audit('waitlist', entry.id, 'waitlist.status_changed', {'from': previous_status, 'to': status})
     db.session.commit()
     return jsonify({'waitlistEntry': entry.to_dict()}), 200
 
@@ -450,11 +499,16 @@ def seat_waitlist_entry(entry_id):
         if table is None:
             return _error('No suitable table is available for this party.', 409)
 
+    previous_table_status = table.status
     table.status = 'occupied'
     table.party_size = entry.party_size
     table.time_seated = datetime.now(timezone.utc)
     entry.status = 'seated'
     entry.table_id = table.id
+    _record_audit('table', table.id, 'table.status_changed', {
+        'from': previous_table_status, 'to': 'occupied', 'partySize': table.party_size,
+    })
+    _record_audit('waitlist', entry.id, 'waitlist.seated', {'tableId': table.id})
     db.session.commit()
     return jsonify({'waitlistEntry': entry.to_dict(), 'table': table.to_dict()}), 200
 

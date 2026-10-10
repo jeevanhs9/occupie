@@ -16,6 +16,7 @@ from flask_jwt_extended import (
     set_refresh_cookies,
     unset_jwt_cookies,
 )
+from sqlalchemy.exc import IntegrityError
 
 from app.extensions import db, limiter
 from app.models import Restaurant, RestaurantMembership, RevokedToken, User
@@ -97,6 +98,9 @@ def register():
     db.session.add(user)
     try:
         db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify(message='An account with this email already exists.'), 409
     except Exception:
         db.session.rollback()
         current_app.logger.exception('Account registration failed')
@@ -149,7 +153,10 @@ def resend_verification():
                 _send_token(user, 'verify', raw_token)
             except Exception:
                 current_app.logger.exception('Verification email delivery failed')
-    return jsonify(message='If the account needs verification, a new link will be sent.'), 200
+    return jsonify(
+        message='If the account needs verification, instructions will be sent using configured email delivery.',
+        deliveryConfigured=bool(current_app.config.get('MAIL_SERVER')),
+    ), 200
 
 
 @auth_bp.route('/login', methods=['POST'])
@@ -180,17 +187,34 @@ def refresh():
 
 
 @auth_bp.route('/logout', methods=['POST'])
-@jwt_required()
 def logout():
-    access_claims = get_jwt()
-    db.session.merge(RevokedToken(jti=access_claims['jti'], expires_at=datetime.fromtimestamp(access_claims['exp'], timezone.utc)))
-    refresh_cookie = request.cookies.get(current_app.config['JWT_REFRESH_COOKIE_NAME'])
-    if refresh_cookie:
+    token_cookies = (
+        (current_app.config['JWT_ACCESS_COOKIE_NAME'], current_app.config['JWT_ACCESS_CSRF_COOKIE_NAME']),
+        (current_app.config['JWT_REFRESH_COOKIE_NAME'], current_app.config['JWT_REFRESH_CSRF_COOKIE_NAME']),
+    )
+    decoded_tokens = []
+    for token_cookie, csrf_cookie in token_cookies:
+        raw_token = request.cookies.get(token_cookie)
+        if not raw_token:
+            continue
         try:
-            refresh_claims = decode_token(refresh_cookie)
-            db.session.merge(RevokedToken(jti=refresh_claims['jti'], expires_at=datetime.fromtimestamp(refresh_claims['exp'], timezone.utc)))
+            claims = decode_token(raw_token, allow_expired=True)
+            decoded_tokens.append((claims, request.cookies.get(csrf_cookie)))
         except Exception:
-            pass
+            continue
+    if decoded_tokens:
+        request_token = request.headers.get('X-CSRF-TOKEN')
+        csrf_valid = any(
+            request_token and cookie_csrf and request_token == cookie_csrf == claims.get('csrf')
+            for claims, cookie_csrf in decoded_tokens
+        )
+        if not csrf_valid:
+            return jsonify(error='Unauthorized', message='A valid CSRF token is required to sign out.'), 401
+        for claims, _ in decoded_tokens:
+            db.session.merge(RevokedToken(
+                jti=claims['jti'],
+                expires_at=datetime.fromtimestamp(claims['exp'], timezone.utc),
+            ))
     db.session.commit()
     response = jsonify(message='Signed out.')
     unset_jwt_cookies(response)

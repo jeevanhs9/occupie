@@ -28,7 +28,8 @@ def _indexes(table):
 
 def _add_column(table, name, column):
     if name not in _columns(table):
-        op.add_column(table, column)
+        with op.batch_alter_table(table) as batch_op:
+            batch_op.add_column(column)
 
 
 def _add_index(table, name, columns, unique=False):
@@ -73,7 +74,6 @@ def upgrade():
             sa.Column('password_reset_expires_at', sa.DateTime(timezone=True)),
             sa.Column('auth_version', sa.Integer(), nullable=False, server_default='1'),
             sa.Column('created_at', sa.DateTime(), nullable=False),
-            sa.UniqueConstraint('email', name='uq_users_email'),
         )
     else:
         _add_column('users', 'email_verified_at', sa.Column('email_verified_at', sa.DateTime(timezone=True)))
@@ -111,7 +111,7 @@ def upgrade():
         )
     else:
         _add_column('restaurant_tables', 'restaurant_id', sa.Column(
-            'restaurant_id', sa.String(36), sa.ForeignKey('restaurants.id'), nullable=False, server_default='default'))
+            'restaurant_id', sa.String(36), sa.ForeignKey('restaurants.id', name='fk_restaurant_tables_restaurant_id'), nullable=False, server_default='default'))
     _add_index('restaurant_tables', 'ix_restaurant_tables_restaurant_id', ['restaurant_id'])
     _add_index('restaurant_tables', 'ix_restaurant_tables_status', ['status'])
 
@@ -132,8 +132,8 @@ def upgrade():
         )
     else:
         _add_column('reservations', 'restaurant_id', sa.Column(
-            'restaurant_id', sa.String(36), sa.ForeignKey('restaurants.id'), nullable=False, server_default='default'))
-        _add_column('reservations', 'customer_id', sa.Column('customer_id', sa.Integer(), sa.ForeignKey('users.id')))
+            'restaurant_id', sa.String(36), sa.ForeignKey('restaurants.id', name='fk_reservations_restaurant_id'), nullable=False, server_default='default'))
+        _add_column('reservations', 'customer_id', sa.Column('customer_id', sa.Integer(), sa.ForeignKey('users.id', name='fk_reservations_customer_id')))
     _add_index('reservations', 'ix_reservations_customer_id', ['customer_id'])
     _add_index('reservations', 'ix_reservations_restaurant_id', ['restaurant_id'])
     _add_index('reservations', 'ix_reservations_starts_at', ['starts_at'])
@@ -154,8 +154,8 @@ def upgrade():
         )
     else:
         _add_column('waitlist_entries', 'restaurant_id', sa.Column(
-            'restaurant_id', sa.String(36), sa.ForeignKey('restaurants.id'), nullable=False, server_default='default'))
-        _add_column('waitlist_entries', 'created_by_id', sa.Column('created_by_id', sa.Integer(), sa.ForeignKey('users.id')))
+            'restaurant_id', sa.String(36), sa.ForeignKey('restaurants.id', name='fk_waitlist_entries_restaurant_id'), nullable=False, server_default='default'))
+        _add_column('waitlist_entries', 'created_by_id', sa.Column('created_by_id', sa.Integer(), sa.ForeignKey('users.id', name='fk_waitlist_entries_created_by_id')))
     _add_index('waitlist_entries', 'ix_waitlist_entries_created_at', ['created_at'])
     _add_index('waitlist_entries', 'ix_waitlist_entries_restaurant_id', ['restaurant_id'])
     _add_index('waitlist_entries', 'ix_waitlist_entries_status', ['status'])

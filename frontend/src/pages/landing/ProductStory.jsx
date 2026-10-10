@@ -45,7 +45,7 @@ export function ProductStory() {
             <div className="editorial-support">
               <p className="eyebrow">Clear decisions, calmer service</p>
               <p>Occupie weighs party size, table capacity and availability, reservation commitments, and walk-in order before suggesting who to seat. The host stays in control, and wait estimates remain blank when reliable turnover data is unavailable.</p>
-              <Link to="/auth/demo-roles" className="inline-link">Explore the operating room <ArrowUpRight size={15} /></Link>
+              <Link to="/auth/login" className="inline-link">Explore the operating room <ArrowUpRight size={15} /></Link>
             </div>
           </div>
 

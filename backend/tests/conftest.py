@@ -54,6 +54,25 @@ def customer_client(app):
     client.environ_base['HTTP_X_CSRF_TOKEN'] = csrf.value
     return client
 
+
+@pytest.fixture
+def staff_client_factory(app):
+    def create(role, email=None):
+        email = email or f'{role}@test.local'
+        user = User(name=f'Test {role}', email=email, role=role, password='a-secure-test-password')
+        user.email_verified_at = datetime.now(timezone.utc)
+        db.session.add(user)
+        db.session.flush()
+        db.session.add(RestaurantMembership(user_id=user.id, restaurant_id='default', role=role))
+        db.session.commit()
+        client = app.test_client()
+        response = client.post('/api/auth/login', json={'email': email, 'password': 'a-secure-test-password'})
+        assert response.status_code == 200
+        csrf = client.get_cookie('occupie_csrf_access')
+        client.environ_base['HTTP_X_CSRF_TOKEN'] = csrf.value
+        return client
+    return create
+
 @pytest.fixture
 def init_database(app):
     """Fixture to pre-populate db if needed."""

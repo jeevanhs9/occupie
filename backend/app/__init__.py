@@ -2,7 +2,8 @@ import logging
 import os
 from datetime import datetime, timezone
 from getpass import getpass
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify
+from flask_cors import CORS
 import click
 
 from app.extensions import db, migrate, jwt, limiter
@@ -21,6 +22,11 @@ def create_app(config_class=Config):
             app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
             app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY')
             app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
+            app.config['COOKIE_SECURE'] = os.environ.get('COOKIE_SECURE', 'false').lower() == 'true'
+            app.config['JWT_COOKIE_SECURE'] = app.config['COOKIE_SECURE']
+            app.config['RATELIMIT_STORAGE_URI'] = os.environ.get('RATELIMIT_STORAGE_URI', 'memory://')
+            app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER')
+            app.config['MAIL_FROM'] = os.environ.get('MAIL_FROM', 'no-reply@occupie.local')
     else:
         app.config.from_object(config_class)
 
@@ -31,21 +37,30 @@ def create_app(config_class=Config):
             raise RuntimeError(f"Production configuration requires {', '.join(missing)}")
         for key in ('SECRET_KEY', 'JWT_SECRET_KEY'):
             value = app.config[key]
-            if len(value) < 32 or value.startswith('change-in-production') or value in {
+            placeholder = any(marker in value.lower() for marker in ('change-in-production', 'replace-with', 'example', 'placeholder'))
+            if len(value) < 32 or placeholder or value in {
                 'dev-secret-key-do-not-use-in-prod',
                 'a-very-long-and-secure-random-secret-key-that-is-at-least-32-bytes',
             }:
                 raise RuntimeError(f"{key} must be at least 32 characters and must not be an example placeholder")
-        if 'sqlite:' in app.config['SQLALCHEMY_DATABASE_URI']:
+        if not app.config['SQLALCHEMY_DATABASE_URI'].startswith(('postgresql://', 'postgresql+')):
             raise RuntimeError('Production configuration requires DATABASE_URL to point to PostgreSQL')
         if not app.config.get('COOKIE_SECURE'):
             raise RuntimeError('Production configuration requires COOKIE_SECURE=true')
-        if app.config.get('RATELIMIT_STORAGE_URI') == 'memory://':
-            raise RuntimeError('Production configuration requires shared RATELIMIT_STORAGE_URI (for example Redis)')
-        if not app.config.get('MAIL_SERVER'):
-            raise RuntimeError('Production configuration requires SMTP MAIL_SERVER for verification and reset email')
+        if not app.config.get('RATELIMIT_STORAGE_URI', '').startswith(('redis://', 'rediss://')):
+            raise RuntimeError('Production configuration requires shared Redis RATELIMIT_STORAGE_URI')
+        mail_from = app.config.get('MAIL_FROM', '')
+        if not app.config.get('MAIL_SERVER') or not mail_from or any(marker in mail_from.lower() for marker in ('.local', 'example')):
+            raise RuntimeError('Production configuration requires SMTP MAIL_SERVER and a verified MAIL_FROM address')
 
     # Initialize extensions
+    CORS(
+        app,
+        resources={r"/api/*": {"origins": sorted(app.config.get('FRONTEND_ORIGINS', set()))}},
+        supports_credentials=True,
+        allow_headers=['Authorization', 'Content-Type', 'X-CSRF-TOKEN'],
+        methods=['GET', 'POST', 'PATCH', 'OPTIONS'],
+    )
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
@@ -79,17 +94,6 @@ def create_app(config_class=Config):
     @jwt.expired_token_loader
     def handle_expired_jwt(jwt_header, jwt_payload):
         return jsonify(error='Unauthorized', message='Your session has expired. Sign in again.'), 401
-
-    @app.after_request
-    def add_cors_headers(response):
-        origin = request.headers.get('Origin', '').rstrip('/')
-        if origin and origin in app.config.get('FRONTEND_ORIGINS', set()):
-            response.headers['Access-Control-Allow-Origin'] = origin
-            response.headers['Vary'] = 'Origin'
-            response.headers['Access-Control-Allow-Headers'] = 'Authorization, Content-Type, X-CSRF-TOKEN'
-            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PATCH, OPTIONS'
-            response.headers['Access-Control-Allow-Credentials'] = 'true'
-        return response
 
     # Configure logging
     if not app.debug and not app.testing:

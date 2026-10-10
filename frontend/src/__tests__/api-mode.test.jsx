@@ -17,9 +17,9 @@ describe('API-backed operational data mode', () => {
     vi.stubEnv('VITE_DATA_MODE', 'api');
     vi.resetModules();
     const fetch = vi.fn(async (url, options = {}) => {
-      if (url.endsWith('/tables') && !options.method) return jsonResponse({ tables: [{ id: 'T01', name: 'Table 1', capacity: 2, status: 'available' }] });
-      if (url.endsWith('/reservations')) return jsonResponse({ reservations: [] });
-      if (url.endsWith('/waitlist') && !options.method) return jsonResponse({ waitlist: [] });
+      if (url.endsWith('/tables') && (!options.method || options.method === 'GET')) return jsonResponse({ tables: [{ id: 'T01', name: 'Table 1', capacity: 2, status: 'available' }] });
+      if (url.endsWith('/reservations') && (!options.method || options.method === 'GET')) return jsonResponse({ reservations: [] });
+      if (url.endsWith('/waitlist') && (!options.method || options.method === 'GET')) return jsonResponse({ waitlist: [] });
       if (url.endsWith('/waitlist') && options.method === 'POST') {
         return jsonResponse({ waitlistEntry: { id: 'WL-API', partyName: 'API Party', partySize: 2, status: 'waiting', waitMinutes: 0, quotedWait: null } }, 201);
       }

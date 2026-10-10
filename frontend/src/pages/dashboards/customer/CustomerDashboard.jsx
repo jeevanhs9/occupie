@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { PageEntrance } from '../../../components/ui/PageEntrance';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../../components/ui/Card';
 import { Badge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
@@ -32,6 +33,7 @@ export function CustomerDashboard() {
     reservations,
     loading,
     error,
+    demoMode,
     refresh,
     recommendReservation,
     createReservation,
@@ -95,7 +97,7 @@ export function CustomerDashboard() {
   };
 
   return (
-    <div className="space-y-6 sm:space-y-8 max-w-5xl mx-auto">
+    <PageEntrance className="space-y-6 sm:space-y-8 max-w-5xl mx-auto">
       {/* Welcome Banner */}
       <div className="rounded-3xl bg-gradient-to-br from-occupie-burgundy-950 via-occupie-walnut-900 to-occupie-walnut-950 text-white p-6 sm:p-8 relative overflow-hidden border border-occupie-burgundy-800 shadow-lg">
         <div className="absolute right-0 top-0 w-96 h-96 bg-occupie-teal-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -225,7 +227,7 @@ export function CustomerDashboard() {
                       </span>
                     </div>
 
-                    <h4 className="text-xl font-bold text-slate-900">{res.restaurantName || MOCK_RESTAURANT_INFO.name}</h4>
+                    <h4 className="text-xl font-bold text-slate-900">{res.restaurantName || (demoMode ? MOCK_RESTAURANT_INFO.name : 'Your restaurant')}</h4>
 
                     <div className="flex flex-wrap items-center gap-y-2 gap-x-5 text-xs text-slate-600">
                       <div className="flex items-center gap-1.5 font-medium">
@@ -284,7 +286,7 @@ export function CustomerDashboard() {
           onAction={handleBookTable}
         />
       </div>
-    </div>
+    </PageEntrance>
   );
 }
 

@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
+import { PageEntrance } from '../../../components/ui/PageEntrance';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../../components/ui/Card';
 import { StatCard } from '../../../components/ui/StatCard';
 import { Badge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
 import { OperationalDataStatus } from '../../../components/common/OperationalDataStatus';
 import { useOperationalData } from '../../../hooks/useOperationalData';
+import { useRole } from '../../../hooks/useRole';
 import { TABLE_STATUS, TABLE_STATUS_CONFIG } from '../../../lib/constants';
 import {
   Sparkles,
@@ -18,13 +20,13 @@ import {
 } from 'lucide-react';
 
 export function FloorStaffDashboard() {
-  const { tables, loading, error, refresh, updateTableStatus } = useOperationalData();
+  const { tables, loading, error, refresh, updateTableStatus, demoMode } = useOperationalData();
+  const { user, isDemoMode } = useRole();
   const [filterMode, setFilterMode] = useState('assigned'); // 'assigned' | 'all'
   const [lastAction, setLastAction] = useState(null);
   const [partySizes, setPartySizes] = useState({});
 
-  // Station A assigned to current staff member Marco R.
-  const assignedServer = 'Marco R.';
+  const assignedServer = isDemoMode ? 'Marco R.' : (user?.name || '');
 
   const handleUpdateStatus = async (tableId, nextStatus, partySize) => {
     const result = await updateTableStatus(tableId, nextStatus, partySize);
@@ -42,7 +44,7 @@ export function FloorStaffDashboard() {
   const availableCount = displayedTables.filter((t) => t.status === 'available').length;
 
   return (
-    <div className="space-y-6 sm:space-y-8">
+    <PageEntrance className="space-y-6 sm:space-y-8">
       {/* Top Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -50,7 +52,7 @@ export function FloorStaffDashboard() {
             <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
               Floor Staff & Table Turnover
             </h2>
-            <Badge variant="warning" size="sm">Station A &bull; Marco R.</Badge>
+            <Badge variant="warning" size="sm">My Station &bull; {user?.name || assignedServer || 'No staff assignment'}</Badge>
           </div>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
             Tap table controls below to quickly update dining, clearing, and ready status.
@@ -91,7 +93,7 @@ export function FloorStaffDashboard() {
             <CheckCircle2 className="w-4 h-4 text-occupie-teal-400" />
             <span>{lastAction}</span>
           </div>
-          <span className="text-[10px] text-slate-400">Mock Data Preview</span>
+          <span className="text-[10px] text-slate-400">{demoMode ? 'Demo preview' : 'Restaurant data'}</span>
         </div>
       )}
 
@@ -243,7 +245,7 @@ export function FloorStaffDashboard() {
           </div>
         </CardContent>
       </Card>
-    </div>
+    </PageEntrance>
   );
 }
 

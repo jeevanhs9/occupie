@@ -48,7 +48,7 @@ describe('Occupie Frontend Phase 1 Foundation', () => {
     );
 
     expect(screen.getByText(/Sign in to Occupie/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Work or Personal Email/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Email address/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/^Password$/i)).toBeInTheDocument();
   });
 

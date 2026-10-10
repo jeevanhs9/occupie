@@ -1,13 +1,22 @@
 import React from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { RoleProvider } from '../hooks/useRole';
-import { useOperationalData } from '../hooks/useOperationalData';
-import { HostDashboard } from '../pages/dashboards/host/HostDashboard';
-import { FloorStaffDashboard } from '../pages/dashboards/floor-staff/FloorStaffDashboard';
-import { CustomerDashboard } from '../pages/dashboards/customer/CustomerDashboard';
-import AppRoutes from '../routes/AppRoutes';
+
+let RoleProvider;
+let useOperationalData;
+let HostDashboard;
+let CustomerDashboard;
+let AppRoutes;
+
+beforeAll(async () => {
+  vi.stubEnv('VITE_DATA_MODE', 'demo');
+  ({ RoleProvider } = await import('../hooks/useRole'));
+  ({ useOperationalData } = await import('../hooks/useOperationalData'));
+  ({ HostDashboard } = await import('../pages/dashboards/host/HostDashboard'));
+  ({ CustomerDashboard } = await import('../pages/dashboards/customer/CustomerDashboard'));
+  ({ default: AppRoutes } = await import('../routes/AppRoutes'));
+});
 
 afterEach(() => {
   cleanup();
@@ -64,7 +73,7 @@ describe('Occupie operational preview flows', () => {
       ['/dashboard/manager', 'Restaurant Operations Hub'],
       ['/dashboard/host', 'Host Stand & Seating Desk'],
       ['/dashboard/floor-staff', 'Floor Staff & Table Turnover'],
-      ['/dashboard/customer', 'Welcome back, Elena Vance'],
+      ['/dashboard/customer', 'Welcome back, Demo Customer'],
     ];
 
     for (const [route, heading] of roleRoutes) {

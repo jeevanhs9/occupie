@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
 export function StatCard({
@@ -11,6 +12,7 @@ export function StatCard({
   accentColor = 'teal',
   className = '',
 }) {
+  const reducedMotion = useReducedMotion();
   const accentBgs = {
     teal: 'bg-occupie-brass-300/30 text-occupie-burgundy-700 border-occupie-brass-500/40',
     cyan: 'bg-occupie-burgundy-50 text-occupie-burgundy-700 border-occupie-burgundy-200/60',
@@ -20,7 +22,12 @@ export function StatCard({
   };
 
   return (
-    <div className={`p-5 sm:p-6 rounded-xl bg-occupie-cream border border-stone-200 shadow-card hover:shadow-card-hover hover:border-occupie-brass-400/70 transition-all duration-200 ${className}`}>
+    <motion.div
+      className={`p-5 sm:p-6 rounded-xl bg-occupie-cream border border-stone-200 shadow-card hover:shadow-card-hover hover:border-occupie-brass-400/70 transition-all duration-200 ${className}`}
+      initial={reducedMotion ? false : { opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={reducedMotion ? { duration: 0 } : { duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+    >
       <div className="flex items-start justify-between">
         <div className="space-y-1">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{title}</p>
@@ -50,7 +57,7 @@ export function StatCard({
           </div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }
 
