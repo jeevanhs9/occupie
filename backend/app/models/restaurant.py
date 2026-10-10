@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import JSON
+from sqlalchemy import JSON, CheckConstraint
 
 from app.extensions import db
 
@@ -9,6 +9,7 @@ class Restaurant(db.Model):
 
     id = db.Column(db.String(36), primary_key=True)
     name = db.Column(db.String(160), nullable=False)
+    allocation_version = db.Column(db.Integer, nullable=False, default=0)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
 
@@ -22,6 +23,34 @@ class RestaurantMembership(db.Model):
     __table_args__ = (
         db.CheckConstraint("role in ('manager', 'host', 'floor_staff')", name='ck_membership_staff_role'),
     )
+
+
+class RestaurantSettings(db.Model):
+    """Persisted operating rules used by allocation and shift reporting."""
+
+    __tablename__ = 'restaurant_settings'
+    __table_args__ = (
+        CheckConstraint('turn_time_minutes BETWEEN 15 AND 360', name='ck_settings_turn_time'),
+        CheckConstraint('reservation_hold_minutes BETWEEN 0 AND 360', name='ck_settings_reservation_hold'),
+        CheckConstraint('grace_period_minutes BETWEEN 0 AND 120', name='ck_settings_grace_period'),
+        CheckConstraint('utilization_target_percent BETWEEN 1 AND 100', name='ck_settings_utilization_target'),
+    )
+
+    restaurant_id = db.Column(db.String(36), db.ForeignKey('restaurants.id', ondelete='CASCADE'), primary_key=True)
+    turn_time_minutes = db.Column(db.Integer, nullable=False, default=90)
+    reservation_hold_minutes = db.Column(db.Integer, nullable=False, default=90)
+    grace_period_minutes = db.Column(db.Integer, nullable=False, default=15)
+    utilization_target_percent = db.Column(db.Integer, nullable=False, default=75)
+    updated_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    def to_dict(self):
+        return {
+            'turnTimeMinutes': self.turn_time_minutes,
+            'reservationHoldMinutes': self.reservation_hold_minutes,
+            'gracePeriodMinutes': self.grace_period_minutes,
+            'utilizationTargetPercent': self.utilization_target_percent,
+            'updatedAt': self.updated_at.isoformat() if self.updated_at else None,
+        }
 
 
 class RevokedToken(db.Model):

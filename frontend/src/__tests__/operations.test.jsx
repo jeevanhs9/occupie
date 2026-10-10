@@ -54,7 +54,7 @@ describe('Occupie operational preview flows', () => {
 
   it('seats the longest-waiting party using an available table', async () => {
     render(withRole(<HostDashboard />));
-    const allocateButtons = screen.getAllByRole('button', { name: 'Allocate' });
+    const allocateButtons = screen.getAllByRole('button', { name: 'Seat party' });
     expect(screen.getByText(/Suggested T14 · 6 seats/)).toBeInTheDocument();
     fireEvent.click(allocateButtons[0]);
     expect(await screen.findByRole('status')).toHaveTextContent(/Seated Patel Group at T14/);
@@ -83,8 +83,13 @@ describe('Occupie operational preview flows', () => {
   });
 
   it('shows a table recommendation before confirming a customer reservation', async () => {
-    render(withRole(<CustomerDashboard />));
-    fireEvent.click(screen.getByRole('button', { name: 'Reserve a Table' }));
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }} initialEntries={['/dashboard/customer']}>
+        <RoleProvider><AppRoutes /></RoleProvider>
+      </MemoryRouter>
+    );
+    fireEvent.click(screen.getByRole('link', { name: 'Reserve a Table' }));
+    expect(await screen.findByRole('heading', { name: 'Book a table' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Find a Table' }));
 
     expect(await screen.findByText(/Suggested table:/)).toBeInTheDocument();

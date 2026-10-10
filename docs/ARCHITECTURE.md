@@ -34,7 +34,7 @@ The frontend API client uses a short-lived HTTP-only JWT access cookie, sends th
 | Shared workspace shell | Sidebar navigation, top bar, mobile sidebar, hash-anchor scrolling, demo-only role switcher | `frontend/src/components/layout/` |
 | Reusable UI | Cards, inputs, buttons, badges, empty states, page entrance and status display | `frontend/src/components/ui/`, `frontend/src/components/common/` |
 | API and operations state | Cookie/CSRF fetch wrapper, auth and operational endpoint methods, dashboard data refresh and mutations | `frontend/src/services/api.js`, `frontend/src/hooks/useOperationalData.jsx` |
-| Allocation rules | Customer booking recommendations call the API; host/manager queue suggestions also run a browser-side helper over loaded data. Seating mutations are rechecked by the API. | `frontend/src/services/allocation.js`, `backend/app/services/allocation.py` |
+| Allocation rules | API mode uses the server allocator for customer, host, and manager recommendations; demo mode uses local fixtures/helpers. Seating mutations are rechecked by the API. | `frontend/src/services/allocation.js`, `backend/app/services/allocation.py`, `backend/app/services/adaptive_allocation.py` |
 | Role workspaces | Manager, host, floor staff, and customer screens | `frontend/src/pages/dashboards/{manager,host,floor-staff,customer}/` |
 | Public and account pages | Landing page, login, customer registration and demo role selection | `frontend/src/pages/landing/`, `frontend/src/pages/auth/` |
 
@@ -74,25 +74,27 @@ The backend supports restaurant selection, but the current browser client sends 
 | Model | Stored data and links |
 |---|---|
 | `User` | Unique email, scrypt password hash, legacy/base role, historical verification/reset columns, and `auth_version`. Historical columns are retained for compatibility but are not read or written by the simplified auth routes. IDs are referenced by reservations, waitlist creators, memberships, audit actors, and revoked-token validation. |
-| `Restaurant` | Tenant ID and name. Parent tenant referenced by memberships, tables, reservations, waitlist rows, and audit events. |
+| `Restaurant` | Tenant ID/name and allocation version used to serialize allocation writes. Parent tenant referenced by memberships, settings, tables, reservations, waitlist rows, reassignment requests, and audit events. |
+| `RestaurantSettings` | Persisted turn time, reservation hold, no-show grace, and utilization target. Defaults apply if no row exists yet. |
 | `RestaurantMembership` | Composite `(user_id, restaurant_id)` key and staff role restricted to manager, host, or floor staff. |
 | `RestaurantTable` | Tenant-scoped capacity, section, status, assigned server, current party size, and seating timestamp. |
-| `Reservation` | Tenant, optional customer owner, guest details, party size, UTC start, optional table, status, and notes/preferences. SQLAlchemy relationships link it to `RestaurantTable` and `Restaurant`. A partial unique index prevents a customer's duplicate active booking for the same restaurant and timestamp. |
+| `Reservation` | Tenant, optional customer owner, guest details, party size, UTC start, optional table, status, notes/preferences, and seated/completed timestamps. Statuses are confirmed, checked-in, seated, completed, cancelled, or no-show. A partial unique index prevents a customer's duplicate active booking for the same restaurant and timestamp. |
+| `ReservationReassignment` | Host/manager table-change request, requested target, decision, actor IDs, reason, and timestamps; manager approval rechecks availability. |
 | `WaitlistEntry` | Tenant, optional creator, party/contact, status, creation time, and optional table. SQLAlchemy links it to the table. |
 | `RevokedToken` | Revoked JWT ID and expiry. |
 | `AuditEvent` | Tenant, optional actor, entity/action, JSON details, timestamp. Mutating operational endpoints record relevant table, reservation, and waitlist events. |
 
-Current status values are `available`, `occupied`, `reserved`, `cleaning` for tables; `confirmed`, `checked_in`, `seated`, `cancelled`, `no_show` for reservations; and `waiting`, `ready`, `seated`, `cancelled` for waitlist entries.
+Current status values are `available`, `occupied`, `reserved`, `cleaning` for tables; `confirmed`, `checked_in`, `seated`, `completed`, `cancelled`, `no_show` for reservations; and `waiting`, `ready`, `seated`, `cancelled` for waitlist entries. The allowed table state transitions are enforced by the operations API. Floor-staff rows/actions are scoped to tables whose free-form `assigned_server` exactly matches the authenticated user's display name.
 
-Migrations are present and the repository documentation says the initial revision carries original local operational rows into restaurant-scoped tables. Development also has an `AUTO_CREATE_SCHEMA` convenience path for an empty schema. This audit did not apply migrations or alter the database. Continue to use `flask db upgrade` for schema changes and preserve existing database files and records.
+Migrations are present through `a6b7c8d9e012`. The two latest revisions add operating settings/lifecycle timestamps and reassignment requests. A fresh SQLite migration to this head passed in the audit scratch database. The existing local database was not migrated or altered; apply `flask --app run db upgrade` against the intended database before using the changed paths. Production PostgreSQL migration behavior was not tested.
 
 ## Current operational limits
 
-- Allocation chooses one currently available table with enough seats, preferring the requested section and then the smallest sufficient capacity. A larger table handles a non-exact capacity; combining tables is not implemented.
-- Host and manager dashboard suggestions use a separate browser helper that reduces reservation timestamps to time-of-day. The server rechecks seating mutations, but the displayed recommendation can disagree with the API's full-datetime allocation rule, especially across dates.
-- Confirmed and checked-in reservations protect their assigned table within a 90-minute window. Occupied, reserved, and cleaning tables are not recommendations for a new booking. Reservation creation rechecks the chosen table and takes row locks where the database supports them.
-- PostgreSQL row locks provide the intended concurrent allocation protection. SQLite does not enforce `SELECT ... FOR UPDATE`; tests against SQLite do not prove production concurrency behavior.
-- There is no occupied-table turnover prediction, automatic late-arrival/no-show transition, notification push, analytics/revenue endpoint, or server-side reporting API. The manager's CSV export is generated in the browser from currently loaded records; preview-only KPI values are labeled demo data.
-- Customer waitlist refresh is polled by the page; the top bar polls health. Neither is a live operational push channel.
+- Allocation chooses one available table with enough seats, preferring the requested section and then the smallest sufficient capacity; combining tables is not implemented. API-mode host and manager queue recommendations use the server allocator.
+- Confirmed, checked-in, and seated reservations are considered against overlapping booking and proposed dining intervals using per-restaurant hold/turn settings. Occupied and cleaning tables are not recommendations; a requested reservation table is rechecked at save/seating time.
+- A restaurant-level allocation version coordinates operational writes. A parallel SQLite reservation test passed, but SQLite does not prove PostgreSQL locking behavior; production database concurrency remains untested.
+- The manager has a current-state report, API CSV export, insert-only table CSV import, and non-persistent what-if simulation. The shift report is not date-filtered historical analytics. Recorded average turn duration uses completed reservations with both timestamps; revenue is not stored. Allocation's revenue-opportunity factor is heuristic.
+- No occupied-table turnover prediction, automatic no-show job, notification push, or reliable wait estimate exists. Queue age is elapsed time. API data refreshes on page load and after actions; there is no live operational push channel.
+- Frontend restaurant selection is absent; ordinary requests use the configured default tenant. Floor assignment is a free-form exact display-name match, not an identity foreign key.
 
 See [workflows.md](workflows.md) and [api-contract.md](api-contract.md) for the verified flow and route details.

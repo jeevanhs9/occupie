@@ -4,7 +4,8 @@ from datetime import datetime, timedelta, timezone
 
 
 DEFAULT_RESERVATION_HOLD_MINUTES = 90
-ACTIVE_RESERVATION_STATUSES = ('confirmed', 'checked_in')
+DEFAULT_TURN_TIME_MINUTES = 90
+ACTIVE_RESERVATION_STATUSES = ('confirmed', 'checked_in', 'seated')
 
 
 def _as_utc(value):
@@ -15,13 +16,27 @@ def _as_utc(value):
     return value.astimezone(timezone.utc)
 
 
-def reservation_conflicts(reservation, at, hold_minutes=DEFAULT_RESERVATION_HOLD_MINUTES):
-    """Return whether a live booking protects its assigned table at ``at``."""
+def reservation_conflicts(
+    reservation,
+    at,
+    hold_minutes=DEFAULT_RESERVATION_HOLD_MINUTES,
+    turn_time_minutes=DEFAULT_TURN_TIME_MINUTES,
+):
+    """Return whether a proposed seating interval overlaps an active booking.
+
+    A booking protects its table starting ``hold_minutes`` before the booked
+    time and through one configured turn after the booked time. A proposed
+    seating is treated as occupying the table for one configured turn too.
+    Cancelled and no-show bookings never hold a table.
+    """
     if reservation.status not in ACTIVE_RESERVATION_STATUSES:
         return False
     starts_at = _as_utc(reservation.starts_at)
     requested_at = _as_utc(at)
-    return abs((starts_at - requested_at).total_seconds()) < hold_minutes * 60
+    protected_start = starts_at - timedelta(minutes=hold_minutes)
+    protected_end = starts_at + timedelta(minutes=turn_time_minutes)
+    requested_end = requested_at + timedelta(minutes=turn_time_minutes)
+    return requested_at < protected_end and protected_start < requested_end
 
 
 def recommend_table(
@@ -31,6 +46,7 @@ def recommend_table(
     at=None,
     preferred_section=None,
     reservation_hold_minutes=DEFAULT_RESERVATION_HOLD_MINUTES,
+    turn_time_minutes=DEFAULT_TURN_TIME_MINUTES,
 ):
     """Choose the smallest currently available table that fits the party.
 
@@ -46,7 +62,7 @@ def recommend_table(
         reservation.table_id
         for reservation in reservations
         if reservation.table_id and reservation_conflicts(
-            reservation, requested_at, reservation_hold_minutes
+            reservation, requested_at, reservation_hold_minutes, turn_time_minutes
         )
     }
 
@@ -70,6 +86,8 @@ def is_table_available(
     reservations=(),
     at=None,
     exclude_reservation_id=None,
+    reservation_hold_minutes=DEFAULT_RESERVATION_HOLD_MINUTES,
+    turn_time_minutes=DEFAULT_TURN_TIME_MINUTES,
 ):
     """Check a specific table for seating, ignoring the booking being seated."""
     if table is None or table.status not in ('available', 'reserved') or table.capacity < party_size:
@@ -78,6 +96,8 @@ def is_table_available(
     return not any(
         reservation.table_id == table.id
         and reservation.id != exclude_reservation_id
-        and reservation_conflicts(reservation, requested_at)
+        and reservation_conflicts(
+            reservation, requested_at, reservation_hold_minutes, turn_time_minutes
+        )
         for reservation in reservations
     )

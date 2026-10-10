@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { PageEntrance } from '../../../components/ui/PageEntrance';
 import { RoyalKPICard } from '../../../components/dashboard/RoyalKPICard';
@@ -10,6 +10,7 @@ import { Input } from '../../../components/ui/Input';
 import { OperationalDataStatus } from '../../../components/common/OperationalDataStatus';
 import { FloorPlan } from '../../../components/dashboard/FloorPlan';
 import { useOperationalData } from '../../../hooks/useOperationalData';
+import { apiService } from '../../../services/api';
 import { MOCK_RESTAURANT_INFO } from '../../../services/mockData';
 import { nextSeatableWaitlistEntry } from '../../../services/allocation';
 import {
@@ -44,11 +45,33 @@ export function ManagerDashboard() {
   const [activeFilter, setActiveFilter] = useState('all');
   const [showAllocationRules, setShowAllocationRules] = useState(false);
   const [showTableForm, setShowTableForm] = useState(false);
-  const [tableForm, setTableForm] = useState({ id: '', name: '', capacity: '2', section: 'Main Dining' });
+  const [tableForm, setTableForm] = useState({ id: '', name: '', capacity: '2', section: 'Main Dining', assignedServer: '' });
   const [tableNotice, setTableNotice] = useState(null);
   const [actionNotice, setActionNotice] = useState(null);
   const [pendingActions, setPendingActions] = useState(new Set());
+  const [managerSettings, setManagerSettings] = useState({ turnTimeMinutes: 90, reservationHoldMinutes: 90, gracePeriodMinutes: 15, utilizationTargetPercent: 75 });
+  const [shiftReport, setShiftReport] = useState(null);
+  const [reassignments, setReassignments] = useState([]);
+  const [managerFeatureError, setManagerFeatureError] = useState(null);
+  const [settingsPending, setSettingsPending] = useState(false);
+  const [simulationInput, setSimulationInput] = useState('2, 4');
+  const [simulationResult, setSimulationResult] = useState(null);
+  const [csvImport, setCsvImport] = useState('id,name,capacity,section\n');
   const shouldReduceMotion = useReducedMotion();
+
+  useEffect(() => {
+    if (demoMode) return undefined;
+    let active = true;
+    Promise.all([apiService.settings.get(), apiService.reports.shift(), apiService.reassignments.list()]).then(([settingsResult, reportResult, reassignmentResult]) => {
+      if (!active) return;
+      const failed = [settingsResult, reportResult, reassignmentResult].find((result) => !result.success);
+      if (failed) setManagerFeatureError(failed.error || 'Manager data could not be loaded.');
+      if (settingsResult.success) setManagerSettings((current) => ({ ...current, ...settingsResult.data.settings }));
+      if (reportResult.success) setShiftReport(reportResult.data.report);
+      if (reassignmentResult.success) setReassignments(reassignmentResult.data.reassignments || []);
+    });
+    return () => { active = false; };
+  }, [demoMode]);
 
   const filteredTables = tables.filter((t) => {
     if (activeFilter === 'all') return true;
@@ -62,10 +85,18 @@ export function ManagerDashboard() {
   const totalCapacity = tables.reduce((sum, table) => sum + table.capacity, 0);
   const activeCovers = tables.filter((table) => table.status === 'occupied').reduce((sum, table) => sum + (table.partySize || 0), 0);
   const occupancyRate = totalCapacity ? Math.round((activeCovers / totalCapacity) * 100) : 0;
-  const activeReservations = reservations.filter((res) => !['cancelled', 'no_show'].includes(res.status));
+  const activeReservations = reservations.filter((res) => !['cancelled', 'no_show', 'completed'].includes(res.status));
+  const metricsUnavailable = !demoMode && (loading || Boolean(error));
   const seatingRecommendation = nextSeatableWaitlistEntry({ waitlist, tables, reservations });
 
-  const exportShiftReport = () => {
+  const exportShiftReport = async () => {
+    if (!demoMode) {
+      const result = await apiService.reports.exportCSV();
+      setActionNotice(result.success
+        ? { type: 'success', message: 'Operational CSV downloaded from the restaurant API.' }
+        : { type: 'error', message: `Could not export the report: ${result.error}` });
+      return;
+    }
     const rows = [
       ['Record', 'ID', 'Name', 'Party size', 'Table', 'Status'],
       ...tables.map((table) => ['Table', table.id, table.name, table.partySize || 0, '', table.status]),
@@ -78,6 +109,72 @@ export function ManagerDashboard() {
     link.download = 'occupie-shift-report.csv';
     link.click();
     window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+  };
+
+  const handleSaveSettings = async (event) => {
+    event.preventDefault();
+    if (demoMode) {
+      setManagerFeatureError('Allocation settings are available only with the Flask API.');
+      return;
+    }
+    setSettingsPending(true);
+    const result = await apiService.settings.update({
+      turnTimeMinutes: managerSettings.turnTimeMinutes,
+      reservationHoldMinutes: managerSettings.reservationHoldMinutes,
+      gracePeriodMinutes: managerSettings.gracePeriodMinutes,
+      utilizationTargetPercent: managerSettings.utilizationTargetPercent,
+    });
+    setSettingsPending(false);
+    if (!result.success) {
+      setManagerFeatureError(result.error);
+      return;
+    }
+    setManagerSettings(result.data.settings);
+    setManagerFeatureError(null);
+    setActionNotice({ type: 'success', message: 'Allocation settings saved.' });
+  };
+
+  const handleSimulation = async () => {
+    const partySizes = simulationInput.split(',').map((value) => Number(value.trim()));
+    if (!partySizes.length || partySizes.some((size) => !Number.isInteger(size) || size < 1)) {
+      setManagerFeatureError('Enter one or more positive party sizes separated by commas.');
+      return;
+    }
+    const result = await apiService.allocations.simulate(partySizes.map((partySize, index) => ({ partyId: `Party ${index + 1}`, partySize })));
+    if (!result.success) {
+      setManagerFeatureError(result.error);
+      return;
+    }
+    setSimulationResult(result.data.simulation || []);
+    setManagerFeatureError(null);
+  };
+
+  const handleImportCSV = async (event) => {
+    event.preventDefault();
+    if (demoMode) {
+      setManagerFeatureError('CSV import requires the Flask API and is unavailable in preview mode.');
+      return;
+    }
+    const result = await apiService.tables.importCSV(csvImport);
+    if (!result.success) {
+      setManagerFeatureError(result.error);
+      return;
+    }
+    setManagerFeatureError(null);
+    setTableNotice(`${result.data.imported} table${result.data.imported === 1 ? '' : 's'} imported from CSV.`);
+    await refresh();
+  };
+
+  const handleReviewReassignment = async (requestId, status) => {
+    const result = await apiService.reassignments.review(requestId, status);
+    if (!result.success) {
+      setManagerFeatureError(result.error);
+      return;
+    }
+    setReassignments((current) => current.filter((item) => item.id !== requestId));
+    setManagerFeatureError(null);
+    setActionNotice({ type: 'success', message: `Reassignment ${status}.` });
+    await refresh();
   };
 
   const runAction = async (key, action) => {
@@ -101,6 +198,7 @@ export function ManagerDashboard() {
       name: tableForm.name.trim(),
       capacity: Number(tableForm.capacity),
       section: tableForm.section.trim(),
+      assignedServer: tableForm.assignedServer.trim(),
       status: 'available',
     });
     if (!result.success) {
@@ -108,7 +206,7 @@ export function ManagerDashboard() {
       return;
     }
     setTableNotice(`${result.data.table.name} was added as available.`);
-    setTableForm({ id: '', name: '', capacity: '2', section: 'Main Dining' });
+    setTableForm({ id: '', name: '', capacity: '2', section: 'Main Dining', assignedServer: '' });
     setShowTableForm(false);
   };
 
@@ -180,15 +278,15 @@ export function ManagerDashboard() {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="royal-body text-occupie-taupe flex items-center gap-2"
           >
-            Intelligent seating allocation and real-time service monitoring
+            Seating allocation and current restaurant operations
             {demoMode && (
               <Badge variant="outline" size="sm" className="bg-amber-50 text-amber-700 border-amber-200">
                 Preview Mode
               </Badge>
             )}
             {!demoMode && !loading && (
-              <Badge variant="outline" size="sm" className="bg-emerald-50 text-emerald-700 border-emerald-200">
-                Live Data
+              <Badge variant="outline" size="sm" className={error ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}>
+                {error ? 'API unavailable' : 'Live Data'}
               </Badge>
             )}
           </motion.p>
@@ -225,6 +323,7 @@ export function ManagerDashboard() {
             variant="accent"
             onClick={exportShiftReport}
             icon={FileSpreadsheet}
+            disabled={!demoMode && (loading || Boolean(error))}
           >
             Export Report
           </Button>
@@ -232,6 +331,7 @@ export function ManagerDashboard() {
       </motion.div>
 
       <OperationalDataStatus loading={loading} error={error} onRetry={refresh} />
+      {managerFeatureError && <div role="alert" className="royal-alert royal-alert-error">{managerFeatureError}</div>}
 
       {/* Data Source Status Panel */}
       {!showEmptyState && (
@@ -252,7 +352,7 @@ export function ManagerDashboard() {
               </div>
               <div className="flex-1">
                 <h3 className="text-sm font-bold text-occupie-ivory mb-1">
-                  {demoMode ? 'Preview Data Mode' : 'Live Restaurant Data'}
+                  {demoMode ? 'Preview Data Mode' : error ? 'Restaurant data unavailable' : 'Live Restaurant Data'}
                 </h3>
                 <p className="text-xs text-occupie-ivory/70 leading-relaxed">
                   {demoMode ? (
@@ -261,6 +361,8 @@ export function ManagerDashboard() {
                       covers seated ({MOCK_RESTAURANT_INFO.activeCovers}), and turnaround time ({MOCK_RESTAURANT_INFO.avgTurnaroundMinutes} min). 
                       Changes reset on page reload.
                     </>
+                  ) : error ? (
+                    <span role="alert">The Flask API request failed. Retry to load operational records; empty counts are not shown as live activity.</span>
                   ) : (
                     <>
                       Connected to Flask backend at <code className="px-1 py-0.5 rounded bg-occupie-walnut-900/50 text-emerald-300 text-xs">
@@ -301,12 +403,21 @@ export function ManagerDashboard() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleCreateTable} className="grid grid-cols-1 gap-4 sm:grid-cols-5 sm:items-end">
+              <form onSubmit={handleCreateTable} className="grid grid-cols-1 gap-4 sm:grid-cols-6 sm:items-end">
                 <Input label="Table ID" value={tableForm.id} onChange={(event) => setTableForm((form) => ({ ...form, id: event.target.value }))} placeholder="T17" required maxLength={32} />
                 <Input label="Display name" value={tableForm.name} onChange={(event) => setTableForm((form) => ({ ...form, name: event.target.value }))} placeholder="Table 17" required maxLength={80} />
                 <Input label="Capacity" type="number" min="1" max="30" value={tableForm.capacity} onChange={(event) => setTableForm((form) => ({ ...form, capacity: event.target.value }))} required />
                 <Input label="Section" value={tableForm.section} onChange={(event) => setTableForm((form) => ({ ...form, section: event.target.value }))} placeholder="Main Dining" required maxLength={80} />
+                <Input label="Assigned staff name" value={tableForm.assignedServer} onChange={(event) => setTableForm((form) => ({ ...form, assignedServer: event.target.value }))} placeholder="Exact staff account name" maxLength={120} />
                 <Button type="submit" variant="accent" icon={Armchair}>Save Table</Button>
+              </form>
+              <form onSubmit={handleImportCSV} className="mt-6 space-y-3 border-t border-occupie-brass-200/30 pt-5">
+                <div>
+                  <h3 className="text-sm font-bold text-occupie-burgundy-700">Import new tables from CSV</h3>
+                  <p className="text-xs text-occupie-taupe">Required headers: id,name,capacity,section. Import is insert-only and rejects duplicate IDs.</p>
+                </div>
+                <textarea aria-label="Table CSV import" value={csvImport} onChange={(event) => setCsvImport(event.target.value)} rows={4} className="w-full rounded-xl border border-occupie-brass-200 bg-white p-3 font-mono text-xs text-slate-800" />
+                <Button type="submit" variant="outline" disabled={demoMode}>Import CSV</Button>
               </form>
             </CardContent>
           </Card>
@@ -345,27 +456,28 @@ export function ManagerDashboard() {
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
           transition={{ duration: 0.3 }}
-          className="royal-alert royal-alert-info"
+          className="royal-alert royal-alert-info space-y-5"
         >
-          <h3 className="font-bold mb-2 text-occupie-burgundy-700">Current Deterministic Allocation Rules</h3>
-          <ul className="space-y-2 text-xs leading-relaxed">
-            <li className="flex gap-2">
-              <span className="text-occupie-brass-500">•</span>
-              <span>Only available tables that fit the party are candidates.</span>
-            </li>
-            <li className="flex gap-2">
-              <span className="text-occupie-brass-500">•</span>
-              <span>Confirmed bookings protect their table within a 90-minute window.</span>
-            </li>
-            <li className="flex gap-2">
-              <span className="text-occupie-brass-500">•</span>
-              <span>The smallest suitable table is preferred; a requested section is honored when possible.</span>
-            </li>
-            <li className="flex gap-2">
-              <span className="text-occupie-brass-500">•</span>
-              <span>Occupied-table clearing time is not predicted, so no wait time is guaranteed.</span>
-            </li>
-          </ul>
+          <div>
+            <h3 className="font-bold mb-2 text-occupie-burgundy-700">Restaurant allocation settings</h3>
+            <p className="text-xs leading-relaxed">The engine only recommends available tables that fit. It protects booked table intervals using the configured hold and turn time; occupied-table turnover is not predicted.</p>
+          </div>
+          <form onSubmit={handleSaveSettings} className="grid grid-cols-1 gap-3 sm:grid-cols-5 sm:items-end">
+            <Input label="Turn time (minutes)" type="number" min="15" max="360" value={managerSettings.turnTimeMinutes} onChange={(event) => setManagerSettings((current) => ({ ...current, turnTimeMinutes: Number(event.target.value) }))} required />
+            <Input label="Reservation hold (minutes)" type="number" min="0" max="360" value={managerSettings.reservationHoldMinutes} onChange={(event) => setManagerSettings((current) => ({ ...current, reservationHoldMinutes: Number(event.target.value) }))} required />
+            <Input label="Arrival grace (minutes)" type="number" min="0" max="120" value={managerSettings.gracePeriodMinutes} onChange={(event) => setManagerSettings((current) => ({ ...current, gracePeriodMinutes: Number(event.target.value) }))} required />
+            <Input label="Utilization target (%)" type="number" min="1" max="100" value={managerSettings.utilizationTargetPercent} onChange={(event) => setManagerSettings((current) => ({ ...current, utilizationTargetPercent: Number(event.target.value) }))} required />
+            <Button type="submit" variant="accent" isLoading={settingsPending} disabled={settingsPending || demoMode}>Save Settings</Button>
+          </form>
+          <div className="space-y-3 border-t border-occupie-brass-200/30 pt-4">
+            <h4 className="font-bold text-occupie-burgundy-700">What-if seating simulation</h4>
+            <p className="text-xs">Compare a sequence of party sizes against current table and reservation records. Simulation does not save assignments.</p>
+            <div className="flex flex-wrap items-end gap-3">
+              <Input label="Party sizes, comma separated" value={simulationInput} onChange={(event) => setSimulationInput(event.target.value)} />
+              <Button type="button" variant="outline" onClick={handleSimulation} disabled={demoMode}>Simulate</Button>
+            </div>
+            {simulationResult && <ul className="space-y-1 text-xs" aria-label="Simulation results">{simulationResult.map((item) => <li key={item.partyId}>{item.partyId}: {item.table ? `${item.table.name} · ${item.reason}` : `No table · ${item.reason}`}</li>)}</ul>}
+          </div>
         </motion.div>
       )}
 
@@ -382,7 +494,7 @@ export function ManagerDashboard() {
           <div id="analytics" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 scroll-mt-24">
             <RoyalKPICard
               title="Occupancy Snapshot"
-              value={`${occupancyRate}%`}
+              value={metricsUnavailable ? '—' : `${occupancyRate}%`}
               trend={demoMode ? 'up' : undefined}
               trendValue={demoMode ? '+14% vs peak' : undefined}
               subtitle={demoMode 
@@ -397,7 +509,7 @@ export function ManagerDashboard() {
             />
             <RoyalKPICard
               title="Active Table Units"
-              value={`${occupiedCount}/${tables.length || '0'}`}
+              value={metricsUnavailable ? '—' : `${occupiedCount}/${tables.length || '0'}`}
               trend={availableCount > 0 ? 'neutral' : undefined}
               trendValue={availableCount > 0 ? `${availableCount} available` : undefined}
               subtitle={tables.length > 0 
@@ -410,7 +522,7 @@ export function ManagerDashboard() {
             />
             <RoyalKPICard
               title="Covers Currently Seated"
-              value={activeCovers}
+              value={metricsUnavailable ? '—' : activeCovers}
               trend={demoMode ? 'up' : undefined}
               trendValue={demoMode ? '+28 bookings' : undefined}
               subtitle={demoMode 
@@ -425,12 +537,12 @@ export function ManagerDashboard() {
             />
             <RoyalKPICard
               title="Avg Dining Turnaround"
-              value={demoMode ? `${MOCK_RESTAURANT_INFO.avgTurnaroundMinutes} min` : '—'}
+              value={demoMode ? `${MOCK_RESTAURANT_INFO.avgTurnaroundMinutes} min` : shiftReport?.recordedAverageTurnMinutes != null ? `${shiftReport.recordedAverageTurnMinutes} min` : '—'}
               trend={demoMode ? 'down' : undefined}
               trendValue={demoMode ? '-8m vs avg' : undefined}
               subtitle={demoMode 
                 ? 'Demo service snapshot' 
-                : 'Requires seated → cleared timestamp history'
+                : shiftReport?.completedTurnsCount ? `${shiftReport.completedTurnsCount} recorded completed visits` : 'No completed turns recorded'
               }
               icon={Clock}
               accentColor="amber"
@@ -454,11 +566,13 @@ export function ManagerDashboard() {
                   <h3 id="manager-queue-title" className="royal-panel-title">Waiting List</h3>
                 </div>
                 <span className="royal-panel-badge">
-                  {waitlist.length} {waitlist.length === 1 ? 'party' : 'parties'}
+                  {metricsUnavailable ? '—' : `${waitlist.length} ${waitlist.length === 1 ? 'party' : 'parties'}`}
                 </span>
               </div>
               
-              {waitlist.length ? (
+              {metricsUnavailable && waitlist.length === 0 ? (
+                <p role="status" className="royal-panel-empty">Waitlist data is unavailable; retry the API request.</p>
+              ) : waitlist.length ? (
                 <div className="royal-waitlist">
                   {waitlist.slice(0, 5).map((entry, index) => {
                     const isSeatable = seatingRecommendation.entry?.id === entry.id && seatingRecommendation.table;
@@ -480,7 +594,7 @@ export function ManagerDashboard() {
                         {entry.status === 'ready' && (
                           <span className="royal-waitlist-status">Ready</span>
                         )}
-                        <span className="royal-waitlist-wait">{entry.waitMinutes ?? '—'} min</span>
+                        <span className="royal-waitlist-wait">{Number.isFinite(entry.waitMinutes) ? `${entry.waitMinutes} min` : 'Wait time unavailable'}</span>
                         
                         {!demoMode && (
                           <div className="flex items-center gap-2 ml-2">
@@ -517,7 +631,7 @@ export function ManagerDashboard() {
               {demoMode ? (
                 <p className="royal-recommendation-note">Preview queue data • changes won't persist</p>
               ) : (
-                waitlist.length === 0 && (
+                !metricsUnavailable && waitlist.length === 0 && (
                   <p className="royal-recommendation-note">Live waitlist is empty</p>
                 )
               )}
@@ -594,7 +708,9 @@ export function ManagerDashboard() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {filteredTables.length ? (
+                {metricsUnavailable && tables.length === 0 ? (
+                  <p role="status" className="p-5 text-sm text-occupie-taupe">Table data is unavailable. Retry the API request before treating this as an empty floor.</p>
+                ) : filteredTables.length ? (
                   <FloorPlan 
                     tables={filteredTables} 
                     onStatusChange={handleTableStatusChange}
@@ -620,18 +736,18 @@ export function ManagerDashboard() {
                 <CardHeader
                   action={
                     <Badge variant="teal" size="sm">
-                      {activeReservations.length} Active Today
+                      {metricsUnavailable ? '—' : activeReservations.length} Open Bookings
                     </Badge>
                   }
                 >
                   <CardTitle>Recent & Upcoming Reservations</CardTitle>
                   <CardDescription>
-                    Bookings allocated for the current evening service.
+                    Open reservations and their current table assignments.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="p-0">
                   <div className="divide-y divide-slate-100">
-                    {activeReservations.map((res) => (
+                    {metricsUnavailable && activeReservations.length === 0 ? <p role="status" className="p-5 text-sm text-slate-500">Reservation data is unavailable; retry the API request.</p> : activeReservations.length === 0 ? <p className="p-5 text-sm text-slate-500">No active reservations.</p> : activeReservations.map((res) => (
                       <div key={res.id} className="p-4 sm:px-6 flex items-center justify-between gap-4 hover:bg-slate-50/70 transition-colors">
                         <div className="flex items-start gap-3 min-w-0">
                           <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-700 text-xs shrink-0">
@@ -670,19 +786,39 @@ export function ManagerDashboard() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {waitlist.length > 0 && (
+                  {metricsUnavailable ? (
+                    <p role="status" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-900">Operational alerts are unavailable until the API responds.</p>
+                  ) : waitlist.length > 0 && (
                     <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
                       {waitlist.length} {waitlist.length === 1 ? 'party is' : 'parties are'} waiting; {availableCount} tables are currently available.
                     </p>
                   )}
-                  {cleaningCount > 0 && (
+                  {!metricsUnavailable && cleaningCount > 0 && (
                     <p className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900">
                       {cleaningCount} {cleaningCount === 1 ? 'table needs' : 'tables need'} cleaning before seating.
                     </p>
                   )}
-                  {waitlist.length === 0 && cleaningCount === 0 && (
+                  {!metricsUnavailable && waitlist.length === 0 && cleaningCount === 0 && (
                     <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">No active service alerts.</p>
                   )}
+                </CardContent>
+              </Card>
+
+              <Card id="reassignments" className="scroll-mt-24">
+                <CardHeader>
+                  <CardTitle>Table change requests</CardTitle>
+                  <CardDescription>Host requests stay pending until a manager reviews them. Approval rechecks table availability.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {reassignments.length === 0 ? <p className="text-sm text-slate-500">{metricsUnavailable ? 'Reassignment requests are unavailable.' : 'No pending table change requests.'}</p> : reassignments.map((item) => (
+                    <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 p-3">
+                      <p className="text-sm text-slate-700">Reservation {item.reservationId}: {item.fromTable} → {item.toTable}{item.reason ? ` · ${item.reason}` : ''}</p>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="accent" onClick={() => handleReviewReassignment(item.id, 'approved')}>Approve</Button>
+                        <Button size="sm" variant="outline" onClick={() => handleReviewReassignment(item.id, 'rejected')}>Reject</Button>
+                      </div>
+                    </div>
+                  ))}
                 </CardContent>
               </Card>
 
@@ -693,7 +829,7 @@ export function ManagerDashboard() {
                     Service Data Note
                   </div>
                   <p className="text-xs text-slate-300 leading-relaxed">
-                    {demoMode ? 'Metrics and records use labeled preview fixtures. Changes reset when this page reloads.' : 'Tables, reservations, and the waitlist come from the configured API. Historical revenue and reliable turnover estimates are not available yet.'}
+                    {demoMode ? 'Metrics and records use labeled preview fixtures. Changes reset when this page reloads.' : 'Tables, reservations, and the waitlist come from the configured API. Revenue is not recorded; average turn duration uses completed reservations only, and occupied-table turnover is not predicted.'}
                   </p>
                 </CardContent>
               </Card>

@@ -25,14 +25,18 @@ export function FloorStaffDashboard() {
   const [filterMode, setFilterMode] = useState('assigned'); // 'assigned' | 'all'
   const [lastAction, setLastAction] = useState(null);
   const [partySizes, setPartySizes] = useState({});
+  const [pendingTableId, setPendingTableId] = useState(null);
 
   const assignedServer = isDemoMode ? 'Marco R.' : (user?.name || '');
 
   const handleUpdateStatus = async (tableId, nextStatus, partySize) => {
+    if (pendingTableId) return;
+    setPendingTableId(tableId);
     const result = await updateTableStatus(tableId, nextStatus, partySize);
     setLastAction(result.success
-      ? `Updated ${tableId} to "${TABLE_STATUS_CONFIG[nextStatus].label}".`
-      : `Could not update ${tableId}: ${result.error}`);
+      ? { type: 'success', message: `Updated ${tableId} to "${TABLE_STATUS_CONFIG[nextStatus].label}".` }
+      : { type: 'error', message: `Could not update ${tableId}: ${result.error}` });
+    setPendingTableId(null);
   };
 
   const displayedTables = filterMode === 'assigned'
@@ -71,7 +75,7 @@ export function FloorStaffDashboard() {
             >
               My Station ({tables.filter(t => t.assignedServer === assignedServer).length})
             </button>
-            <button
+            {isDemoMode && <button
               onClick={() => setFilterMode('all')}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                 filterMode === 'all'
@@ -80,7 +84,7 @@ export function FloorStaffDashboard() {
               }`}
             >
               All Tables ({tables.length})
-            </button>
+            </button>}
           </div>
         </div>
       </div>
@@ -88,10 +92,10 @@ export function FloorStaffDashboard() {
       <div id="service-updates" className="scroll-mt-24">
         <OperationalDataStatus loading={loading} error={error} onRetry={refresh} />
         {lastAction && (
-          <div className="mt-3 p-3 rounded-xl bg-slate-900 text-white text-xs font-medium flex items-center justify-between shadow-md">
+          <div role={lastAction.type === 'error' ? 'alert' : 'status'} className={`mt-3 p-3 rounded-xl text-xs font-medium flex items-center justify-between shadow-md ${lastAction.type === 'error' ? 'bg-rose-800 text-white' : 'bg-slate-900 text-white'}`}>
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-occupie-teal-400" />
-              <span>{lastAction}</span>
+              {lastAction.type === 'error' ? <AlertCircle className="w-4 h-4 text-rose-200" aria-hidden="true" /> : <CheckCircle2 className="w-4 h-4 text-occupie-teal-400" aria-hidden="true" />}
+              <span>{lastAction.message}</span>
             </div>
             <span className="text-[10px] text-slate-400">{demoMode ? 'Demo preview' : 'Restaurant data'}</span>
           </div>
@@ -141,7 +145,24 @@ export function FloorStaffDashboard() {
         </CardHeader>
         <CardContent>
           <div id="table-status" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 scroll-mt-24">
-            {displayedTables.map((table) => {
+            {!loading && !error && displayedTables.length === 0 ? (
+              <div className="col-span-full rounded-xl border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center" role="status">
+                <Armchair className="mx-auto mb-3 h-8 w-8 text-slate-400" aria-hidden="true" />
+                <h3 className="font-semibold text-slate-800">
+                  {tables.length ? 'No tables are assigned to your station' : 'No tables are configured yet'}
+                </h3>
+                <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
+                  {tables.length
+                    ? 'Your manager has not assigned tables to your account. You can view the full floor while you wait.'
+                    : 'Ask a manager to add restaurant tables before updating service status.'}
+                </p>
+                {tables.length > 0 && filterMode === 'assigned' && (
+                  <Button type="button" size="sm" variant="outline" className="mt-4" onClick={() => setFilterMode('all')}>
+                    View all tables
+                  </Button>
+                )}
+              </div>
+            ) : displayedTables.map((table) => {
               const statusMeta = TABLE_STATUS_CONFIG[table.status] || TABLE_STATUS_CONFIG.available;
 
               return (
@@ -203,7 +224,7 @@ export function FloorStaffDashboard() {
                       <button
                         type="button"
                         onClick={() => handleUpdateStatus(table.id, TABLE_STATUS.AVAILABLE)}
-                        disabled={table.status === TABLE_STATUS.AVAILABLE}
+                        disabled={pendingTableId === table.id || (table.status !== TABLE_STATUS.CLEANING && table.status !== TABLE_STATUS.AVAILABLE)}
                         className={`text-[11px] font-bold py-1.5 px-2 rounded-lg border transition-all ${
                           table.status === TABLE_STATUS.AVAILABLE
                             ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
@@ -216,7 +237,7 @@ export function FloorStaffDashboard() {
                       <button
                         type="button"
                         onClick={() => handleUpdateStatus(table.id, TABLE_STATUS.OCCUPIED, Number(partySizes[table.id] || Math.min(2, table.capacity)))}
-                        disabled={table.status !== TABLE_STATUS.AVAILABLE}
+                        disabled={pendingTableId === table.id || table.status !== TABLE_STATUS.AVAILABLE}
                         className={`text-[11px] font-bold py-1.5 px-2 rounded-lg border transition-all ${
                           table.status === TABLE_STATUS.OCCUPIED
                             ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
@@ -229,7 +250,7 @@ export function FloorStaffDashboard() {
                       <button
                         type="button"
                         onClick={() => handleUpdateStatus(table.id, TABLE_STATUS.CLEANING)}
-                        disabled={table.status === TABLE_STATUS.CLEANING}
+                        disabled={pendingTableId === table.id || table.status === TABLE_STATUS.CLEANING || table.status === TABLE_STATUS.RESERVED}
                         className={`text-[11px] font-bold py-1.5 px-2 rounded-lg border transition-all ${
                           table.status === TABLE_STATUS.CLEANING
                             ? 'bg-sky-600 text-white border-sky-600 shadow-xs'

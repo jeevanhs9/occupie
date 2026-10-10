@@ -318,6 +318,26 @@
   white-space: nowrap;
 }
 
+.host-dashboard__reservation-reassignment {
+  grid-column: 2 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .5rem;
+}
+
+.host-dashboard__reservation-reassignment select {
+  min-height: 2rem;
+  max-width: 17rem;
+  border: 1px solid rgba(137, 106, 61, .3);
+  border-radius: .6rem;
+  background: #fffdf9;
+  padding: .35rem .55rem;
+  color: #3a2d2b;
+  font-size: .68rem;
+}
+
 .host-dashboard__confirm {
   grid-column: 2 / -1;
   display: flex;
@@ -594,6 +614,11 @@
   }
 
   .host-dashboard__reservation-actions {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
+
+  .host-dashboard__reservation-reassignment {
     grid-column: 2;
     justify-content: flex-start;
   }

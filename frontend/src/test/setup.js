@@ -18,3 +18,20 @@ if (!window.matchMedia) {
 }
 
 Object.defineProperty(window, 'scrollTo', { configurable: true, value: vi.fn() });
+
+if (!globalThis.IntersectionObserver) {
+  class MockIntersectionObserver {
+    constructor(callback, options = {}) {
+      this.callback = callback;
+      this.options = options;
+    }
+
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+    takeRecords() { return []; }
+  }
+
+  globalThis.IntersectionObserver = MockIntersectionObserver;
+  window.IntersectionObserver = MockIntersectionObserver;
+}

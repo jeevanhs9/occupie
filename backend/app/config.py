@@ -22,7 +22,10 @@ class Config:
     JWT_ACCESS_CSRF_HEADER_NAME = 'X-CSRF-TOKEN'
     JWT_ACCESS_TOKEN_EXPIRES = 900
     APP_ENV = os.environ.get('FLASK_ENV', 'development').lower()
-    AUTO_CREATE_SCHEMA = APP_ENV == 'development'
+    # The database schema is managed by Alembic. Creating it while importing
+    # the app can make `flask db upgrade` fail when a later revision creates
+    # tables that `db.create_all()` already added.
+    AUTO_CREATE_SCHEMA = False
     FRONTEND_ORIGINS = {
         origin.strip().rstrip('/')
         for origin in os.environ.get('FRONTEND_ORIGINS', os.environ.get('FRONTEND_ORIGIN', 'http://localhost:5173,http://127.0.0.1:5173')).split(',')

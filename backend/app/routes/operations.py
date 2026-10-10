@@ -1,18 +1,23 @@
-from datetime import datetime, timezone
+import csv
+import io
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-from flask import Blueprint, current_app, g, jsonify, request
+from flask import Blueprint, current_app, g, jsonify, make_response, request
 from flask_jwt_extended import get_current_user, verify_jwt_in_request
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import update
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 from app.extensions import db
 from app.middleware.auth import roles_required
 from app.models import (
     RestaurantTable,
     Reservation,
+    ReservationReassignment,
     WaitlistEntry,
     Restaurant,
     RestaurantMembership,
+    RestaurantSettings,
     AuditEvent,
     TABLE_STATUSES,
     RESERVATION_STATUSES,
@@ -32,7 +37,9 @@ def require_role_and_restaurant():
     if not user:
         return _error('Sign in to continue.', 401)
 
-    payload = request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        payload = {}
     selected_restaurant = (
         request.headers.get('X-Restaurant-ID')
         or request.args.get('restaurant_id')
@@ -47,7 +54,11 @@ def require_role_and_restaurant():
     ).first()
     role = membership.role if membership else 'customer'
     path = request.path.removeprefix('/api/v1')
-    if path.startswith('/tables'):
+    if path == '/settings/allocation' and request.method == 'GET':
+        allowed = {'manager', 'host'}
+    elif path.startswith('/settings') or path.startswith('/reports') or path.startswith('/reassignments') or path == '/allocations/simulate' or path == '/tables/import':
+        allowed = {'manager'}
+    elif path.startswith('/tables'):
         allowed = {'manager', 'host', 'floor_staff', 'customer'} if request.method == 'GET' else (
             {'manager'} if path == '/tables' else {'manager', 'host', 'floor_staff'}
         )
@@ -141,26 +152,101 @@ def _table_by_id(table_id, lock=False):
     query = RestaurantTable.query.filter_by(id=table_id, restaurant_id=g.restaurant_id)
     if lock:
         query = query.with_for_update()
-    return query.first()
+    table = query.first()
+    if g.occupie_role == 'floor_staff' and table and table.assigned_server != g.occupie_user.name:
+        return None
+    return table
+
+
+def _lock_restaurant_allocation():
+    """Serialize operational writes per restaurant on PostgreSQL and SQLite."""
+    try:
+        result = db.session.execute(
+            update(Restaurant)
+            .where(Restaurant.id == g.restaurant_id)
+            .values(allocation_version=Restaurant.allocation_version + 1)
+        )
+        if result.rowcount != 1:
+            db.session.rollback()
+            return _error('Restaurant was not found.', 404)
+        return None
+    except OperationalError:
+        db.session.rollback()
+        return _error('Another restaurant update is in progress. Retry this action.', 409)
 
 
 def _recommendation(party_size, at=None, preferred_section=None, lock_tables=False):
+    recommendations = _recommendations(
+        party_size, at, preferred_section, lock_tables=lock_tables,
+    )
+    return recommendations[0].table if recommendations else None
+
+
+def _restaurant_settings():
+    settings = db.session.get(RestaurantSettings, g.restaurant_id)
+    if settings is not None:
+        return settings
+    return RestaurantSettings(
+        restaurant_id=g.restaurant_id,
+        turn_time_minutes=90,
+        reservation_hold_minutes=90,
+        grace_period_minutes=15,
+        utilization_target_percent=75,
+    )
+
+
+def _recommendations(party_size, at=None, preferred_section=None, lock_tables=False, all_candidates=False):
     table_query = RestaurantTable.query.filter_by(restaurant_id=g.restaurant_id).order_by(RestaurantTable.id)
     if lock_tables:
         table_query = table_query.with_for_update()
     tables = table_query.all()
-    reservations = Reservation.query.filter(
-        Reservation.restaurant_id == g.restaurant_id,
-        Reservation.status.in_(('confirmed', 'checked_in')),
-        Reservation.table_id.isnot(None),
-    ).all()
-    return recommend_table(
-        tables,
-        party_size,
+    reservations = Reservation.query.filter_by(restaurant_id=g.restaurant_id).all()
+    from app.services.adaptive_allocation import recommend_tables
+    settings = _restaurant_settings()
+    return recommend_tables(
+        tables=tables,
+        party_size=party_size,
         reservations=reservations,
         at=at or datetime.now(timezone.utc),
         preferred_section=preferred_section,
+        restaurant_id=g.restaurant_id,
+        return_all_candidates=all_candidates,
+        reservation_hold_minutes=settings.reservation_hold_minutes,
+        turn_time_minutes=settings.turn_time_minutes,
     )
+
+
+def _allocation_failure(party_size, at=None):
+    payload = _allocation_failure_payload(party_size)
+    return jsonify(payload), 409
+
+
+def _allocation_failure_payload(party_size):
+    capacities = [
+        row[0] for row in db.session.query(RestaurantTable.capacity).filter_by(
+            restaurant_id=g.restaurant_id
+        ).all()
+    ]
+    if not capacities:
+        code = 'no_tables_configured'
+        message = 'This restaurant has no tables configured yet.'
+    elif party_size > max(capacities):
+        code = 'party_exceeds_capacity'
+        message = f'No table can seat a party of {party_size}; the largest table seats {max(capacities)}.'
+    else:
+        code = 'tables_unavailable'
+        message = 'All tables that fit this party are occupied, unavailable, or protected for reservations at that time.'
+    return {
+        'error': 'Allocation Unavailable',
+        'message': message,
+        'status_code': 409,
+        'reasonCode': code,
+        'nextActions': {
+            'changePartySize': True,
+            'changeDateTime': True,
+            'joinWaitlist': bool(capacities and party_size <= max(capacities)),
+        },
+    }
 
 
 def _is_table_available_for_party(table, party_size, at=None, exclude_reservation_id=None):
@@ -168,7 +254,6 @@ def _is_table_available_for_party(table, party_size, at=None, exclude_reservatio
         return False
     reservations = Reservation.query.filter(
         Reservation.restaurant_id == g.restaurant_id,
-        Reservation.status.in_(('confirmed', 'checked_in')),
         Reservation.table_id == table.id,
     ).all()
     return is_table_available(
@@ -177,13 +262,18 @@ def _is_table_available_for_party(table, party_size, at=None, exclude_reservatio
         reservations=reservations,
         at=at or datetime.now(timezone.utc),
         exclude_reservation_id=exclude_reservation_id,
+        reservation_hold_minutes=_restaurant_settings().reservation_hold_minutes,
+        turn_time_minutes=_restaurant_settings().turn_time_minutes,
     )
 
 
 @operations_bp.route('/tables', methods=['GET', 'POST'])
 def tables_collection():
     if request.method == 'GET':
-        tables = RestaurantTable.query.filter_by(restaurant_id=g.restaurant_id).order_by(RestaurantTable.id).all()
+        table_query = RestaurantTable.query.filter_by(restaurant_id=g.restaurant_id)
+        if g.occupie_role == 'floor_staff':
+            table_query = table_query.filter_by(assigned_server=g.occupie_user.name)
+        tables = table_query.order_by(RestaurantTable.id).all()
         if g.occupie_role == 'customer':
             rows = [{key: table.to_dict()[key] for key in ('id', 'name', 'capacity', 'section', 'status')} for table in tables]
         else:
@@ -243,6 +333,9 @@ def update_table_status(table_id):
     payload, error = _payload()
     if error:
         return error
+    lock_error = _lock_restaurant_allocation()
+    if lock_error:
+        return lock_error
     table = _table_by_id(table_id, lock=True)
     if table is None:
         return _error('Table was not found.', 404)
@@ -262,6 +355,14 @@ def update_table_status(table_id):
         table.party_size = party_size
         table.time_seated = datetime.now(timezone.utc)
     else:
+        allowed_table_transitions = {
+            'available': {'cleaning', 'reserved'},
+            'reserved': {'available'},
+            'occupied': {'cleaning'},
+            'cleaning': {'available'},
+        }
+        if status != table.status and status not in allowed_table_transitions[table.status]:
+            return _error(f'A table cannot move from {table.status} to {status}.', 409)
         table.party_size = 0
         table.time_seated = None
 
@@ -280,6 +381,11 @@ def reservations_collection():
         query = Reservation.query.filter_by(restaurant_id=g.restaurant_id)
         if g.occupie_role == 'customer':
             query = query.filter_by(customer_id=g.occupie_user.id)
+        elif g.occupie_role == 'floor_staff':
+            assigned_table_ids = db.session.query(RestaurantTable.id).filter_by(
+                restaurant_id=g.restaurant_id, assigned_server=g.occupie_user.name,
+            )
+            query = query.filter(Reservation.table_id.in_(assigned_table_ids))
         reservations = query.order_by(Reservation.starts_at, Reservation.id).all()
         return jsonify({'reservations': [reservation.to_dict() for reservation in reservations]}), 200
 
@@ -310,6 +416,9 @@ def reservations_collection():
         return _error('phone must be a string of 40 characters or fewer.', 422, {'phone': 'Invalid value.'})
     if notes is not None and (not isinstance(notes, str) or len(notes) > 500):
         return _error('notes must be a string of 500 characters or fewer.', 422, {'notes': 'Invalid value.'})
+    lock_error = _lock_restaurant_allocation()
+    if lock_error:
+        return lock_error
     requested_table_id = payload.get('tableId')
     customer_id = g.occupie_user.id if g.occupie_role == 'customer' else None
     if customer_id and Reservation.query.filter(
@@ -330,7 +439,7 @@ def reservations_collection():
     else:
         table = _recommendation(party_size, starts_at, preferred_section, lock_tables=True)
     if table is None:
-        return _error('No suitable table is available for that party and time.', 409)
+        return _allocation_failure(party_size, starts_at)
 
     reservation = Reservation(
         id=f"RES-{uuid4().hex[:8].upper()}",
@@ -360,6 +469,9 @@ def update_reservation_status(reservation_id):
     payload, error = _payload()
     if error:
         return error
+    lock_error = _lock_restaurant_allocation()
+    if lock_error:
+        return lock_error
     reservation = Reservation.query.filter_by(id=reservation_id, restaurant_id=g.restaurant_id).first()
     if reservation is None:
         return _error('Reservation was not found.', 404)
@@ -369,7 +481,8 @@ def update_reservation_status(reservation_id):
     allowed_transitions = {
         'confirmed': {'checked_in', 'seated', 'cancelled', 'no_show'},
         'checked_in': {'seated', 'cancelled', 'no_show'},
-        'seated': set(),
+        'seated': {'completed'},
+        'completed': set(),
         'cancelled': set(),
         'no_show': set(),
     }
@@ -381,6 +494,13 @@ def update_reservation_status(reservation_id):
         return _error('Customers may only check in to or cancel their own reservation.', 403)
     if status == reservation.status:
         return jsonify({'reservation': reservation.to_dict()}), 200
+    if status == 'no_show':
+        starts_at = reservation.starts_at
+        if starts_at.tzinfo is None:
+            starts_at = starts_at.replace(tzinfo=timezone.utc)
+        grace_minutes = _restaurant_settings().grace_period_minutes
+        if datetime.now(timezone.utc) < starts_at.astimezone(timezone.utc) + timedelta(minutes=grace_minutes):
+            return _error(f'The {grace_minutes}-minute arrival grace period has not ended.', 409)
     previous_status = reservation.status
     if status == 'seated':
         table = _table_by_id(reservation.table_id, lock=True) if reservation.table_id else None
@@ -395,8 +515,19 @@ def update_reservation_status(reservation_id):
         table.status = 'occupied'
         table.party_size = reservation.party_size
         table.time_seated = datetime.now(timezone.utc)
+        reservation.seated_at = table.time_seated
         _record_audit('table', table.id, 'table.status_changed', {
             'from': previous_table_status, 'to': 'occupied', 'partySize': table.party_size,
+        })
+    elif status == 'completed':
+        table = _table_by_id(reservation.table_id, lock=True) if reservation.table_id else None
+        if table is None or table.status != 'occupied':
+            return _error('The reservation table is not currently occupied.', 409)
+        reservation.completed_at = datetime.now(timezone.utc)
+        table.status = 'cleaning'
+        table.party_size = 0
+        _record_audit('table', table.id, 'table.status_changed', {
+            'from': 'occupied', 'to': 'cleaning', 'partySize': 0,
         })
     reservation.status = status
     _record_audit('reservation', reservation.id, 'reservation.status_changed', {
@@ -510,6 +641,9 @@ def update_waitlist_entry(entry_id):
 @operations_bp.route('/waitlist/<string:entry_id>/seat', methods=['POST'])
 @roles_required('manager', 'host')
 def seat_waitlist_entry(entry_id):
+    lock_error = _lock_restaurant_allocation()
+    if lock_error:
+        return lock_error
     entry = WaitlistEntry.query.filter_by(id=entry_id, restaurant_id=g.restaurant_id).first()
     if entry is None:
         return _error('Waitlist entry was not found.', 404)
@@ -555,6 +689,289 @@ def seat_waitlist_entry(entry_id):
     return jsonify({'waitlistEntry': entry.to_dict(), 'table': table.to_dict()}), 200
 
 
+@operations_bp.route('/reservations/<string:reservation_id>/reassignment', methods=['POST'])
+@roles_required('manager', 'host')
+def request_reservation_reassignment(reservation_id):
+    payload, error = _payload()
+    if error:
+        return error
+    target_id = payload.get('tableId')
+    reason = payload.get('reason')
+    if not isinstance(target_id, str) or not target_id.strip():
+        return _error('tableId is required.', 422, {'tableId': 'Required.'})
+    if reason is not None and (not isinstance(reason, str) or len(reason) > 500):
+        return _error('reason must be a string of 500 characters or fewer.', 422, {'reason': 'Invalid value.'})
+    lock_error = _lock_restaurant_allocation()
+    if lock_error:
+        return lock_error
+    reservation = Reservation.query.filter_by(id=reservation_id, restaurant_id=g.restaurant_id).with_for_update().first()
+    if reservation is None:
+        return _error('Reservation was not found.', 404)
+    if reservation.status not in {'confirmed', 'checked_in'}:
+        return _error('Only a confirmed or checked-in reservation can be reassigned.', 409)
+    if ReservationReassignment.query.filter_by(
+        restaurant_id=g.restaurant_id, reservation_id=reservation.id, status='pending',
+    ).first():
+        return _error('A manager review is already pending for this reservation.', 409)
+    target = _table_by_id(target_id.strip(), lock=True)
+    if target is None:
+        return _error('Target table was not found.', 404)
+    if target.id == reservation.table_id:
+        return _error('Choose a different table for reassignment.', 422)
+    if target.status != 'available' or not _is_table_available_for_party(
+        target, reservation.party_size, reservation.starts_at, exclude_reservation_id=reservation.id,
+    ):
+        return _error('The target table cannot fit this reservation or is protected for another booking.', 409)
+    reassignment = ReservationReassignment(
+        id=f'REA-{uuid4().hex[:8].upper()}',
+        restaurant_id=g.restaurant_id,
+        reservation_id=reservation.id,
+        from_table_id=reservation.table_id,
+        to_table_id=target.id,
+        requested_by_user_id=g.occupie_user.id,
+        reason=reason.strip() if reason and reason.strip() else None,
+        status='pending',
+    )
+    db.session.add(reassignment)
+    _record_audit('reservation', reservation.id, 'reservation.reassignment_requested', reassignment.to_dict())
+    db.session.commit()
+    return jsonify({'reassignment': reassignment.to_dict()}), 201
+
+
+@operations_bp.route('/reassignments', methods=['GET'])
+@roles_required('manager')
+def list_reassignments():
+    requests = ReservationReassignment.query.filter_by(
+        restaurant_id=g.restaurant_id, status='pending',
+    ).order_by(ReservationReassignment.created_at, ReservationReassignment.id).all()
+    return jsonify({'reassignments': [item.to_dict() for item in requests]}), 200
+
+
+@operations_bp.route('/reassignments/<string:reassignment_id>/status', methods=['PATCH'])
+@roles_required('manager')
+def review_reassignment(reassignment_id):
+    payload, error = _payload()
+    if error:
+        return error
+    status = payload.get('status')
+    if status not in {'approved', 'rejected'}:
+        return _error('status must be approved or rejected.', 422, {'status': 'Invalid status.'})
+    lock_error = _lock_restaurant_allocation()
+    if lock_error:
+        return lock_error
+    reassignment = ReservationReassignment.query.filter_by(
+        id=reassignment_id, restaurant_id=g.restaurant_id,
+    ).with_for_update().first()
+    if reassignment is None:
+        return _error('Reassignment request was not found.', 404)
+    if reassignment.status != 'pending':
+        return _error('This reassignment request has already been reviewed.', 409)
+    reservation = Reservation.query.filter_by(
+        id=reassignment.reservation_id, restaurant_id=g.restaurant_id,
+    ).with_for_update().first()
+    if reservation is None or reservation.status not in {'confirmed', 'checked_in'}:
+        return _error('The reservation is no longer eligible for reassignment.', 409)
+    if status == 'approved':
+        if reservation.table_id != reassignment.from_table_id:
+            return _error('The reservation assignment changed since this request was made.', 409)
+        target = _table_by_id(reassignment.to_table_id, lock=True)
+        if target is None or target.status != 'available' or not _is_table_available_for_party(
+            target, reservation.party_size, reservation.starts_at, exclude_reservation_id=reservation.id,
+        ):
+            return _error('The requested table is no longer available. Reject this request and ask the host to choose another table.', 409)
+        reservation.table_id = target.id
+    reassignment.status = status
+    reassignment.reviewed_by_user_id = g.occupie_user.id
+    reassignment.reviewed_at = datetime.now(timezone.utc)
+    _record_audit('reservation', reservation.id, f'reservation.reassignment_{status}', {
+        'requestId': reassignment.id, 'fromTableId': reassignment.from_table_id,
+        'toTableId': reassignment.to_table_id,
+    })
+    db.session.commit()
+    return jsonify({'reassignment': reassignment.to_dict(), 'reservation': reservation.to_dict()}), 200
+
+
+@operations_bp.route('/settings/allocation', methods=['GET', 'PATCH'])
+@roles_required('manager', 'host')
+def allocation_settings():
+    settings = _restaurant_settings()
+    if request.method == 'GET':
+        return jsonify({'settings': settings.to_dict()}), 200
+    payload, error = _payload()
+    if error:
+        return error
+    if g.occupie_role != 'manager':
+        return _error('Only a manager may change allocation settings.', 403)
+    fields = {
+        'turnTimeMinutes': ('turn_time_minutes', 15, 360),
+        'reservationHoldMinutes': ('reservation_hold_minutes', 0, 360),
+        'gracePeriodMinutes': ('grace_period_minutes', 0, 120),
+        'utilizationTargetPercent': ('utilization_target_percent', 1, 100),
+    }
+    if not payload or any(key not in fields for key in payload):
+        return _error('Provide one or more supported allocation settings.', 422)
+    if db.session.get(RestaurantSettings, g.restaurant_id) is None:
+        db.session.add(settings)
+    for key, value in payload.items():
+        attribute, minimum, maximum = fields[key]
+        if not isinstance(value, int) or isinstance(value, bool) or not minimum <= value <= maximum:
+            return _error(f'{key} must be an integer from {minimum} to {maximum}.', 422, {key: 'Out of range.'})
+        setattr(settings, attribute, value)
+    _record_audit('settings', g.restaurant_id, 'allocation.settings_updated', payload)
+    db.session.commit()
+    return jsonify({'settings': settings.to_dict()}), 200
+
+
+@operations_bp.route('/reports/shift', methods=['GET'])
+@roles_required('manager')
+def shift_report():
+    tables = RestaurantTable.query.filter_by(restaurant_id=g.restaurant_id).all()
+    reservations = Reservation.query.filter_by(restaurant_id=g.restaurant_id).all()
+    waitlist = WaitlistEntry.query.filter_by(restaurant_id=g.restaurant_id).all()
+    settings = _restaurant_settings()
+    completed = [
+        row for row in reservations
+        if row.status == 'completed' and row.seated_at is not None and row.completed_at is not None
+    ]
+    turn_minutes = []
+    for row in completed:
+        seated_at = row.seated_at.replace(tzinfo=timezone.utc) if row.seated_at.tzinfo is None else row.seated_at
+        completed_at = row.completed_at.replace(tzinfo=timezone.utc) if row.completed_at.tzinfo is None else row.completed_at
+        turn_minutes.append(max(0.0, (completed_at - seated_at).total_seconds() / 60))
+    table_counts = {status: sum(table.status == status for table in tables) for status in TABLE_STATUSES}
+    reservation_counts = {status: sum(row.status == status for row in reservations) for status in RESERVATION_STATUSES}
+    waitlist_counts = {status: sum(row.status == status for row in waitlist) for status in WAITLIST_STATUSES}
+    return jsonify({
+        'report': {
+            'generatedAt': datetime.now(timezone.utc).isoformat(),
+            'tables': {'total': len(tables), 'byStatus': table_counts},
+            'reservations': {'total': len(reservations), 'byStatus': reservation_counts},
+            'waitlist': {'total': len(waitlist), 'byStatus': waitlist_counts},
+            'utilizationPercent': round(100 * table_counts.get('occupied', 0) / len(tables), 1) if tables else None,
+            'utilizationTargetPercent': settings.utilization_target_percent,
+            'utilizationOnTarget': bool(tables and 100 * table_counts.get('occupied', 0) / len(tables) >= settings.utilization_target_percent),
+            'recordedAverageTurnMinutes': round(sum(turn_minutes) / len(turn_minutes), 1) if turn_minutes else None,
+            'completedTurnsCount': len(turn_minutes),
+        },
+    }), 200
+
+
+@operations_bp.route('/reports/export.csv', methods=['GET'])
+@roles_required('manager')
+def export_operational_csv():
+    stream = io.StringIO()
+    writer = csv.writer(stream)
+    writer.writerow(['recordType', 'id', 'status', 'name', 'partySize', 'startsAt', 'tableId', 'capacity', 'section', 'createdAt'])
+    for table in RestaurantTable.query.filter_by(restaurant_id=g.restaurant_id).order_by(RestaurantTable.id):
+        writer.writerow(['table', table.id, table.status, table.name, '', '', table.id, table.capacity, table.section, table.created_at.isoformat()])
+    for row in Reservation.query.filter_by(restaurant_id=g.restaurant_id).order_by(Reservation.starts_at, Reservation.id):
+        writer.writerow(['reservation', row.id, row.status, row.guest_name, row.party_size, row.starts_at.isoformat(), row.table_id or '', '', '', row.created_at.isoformat()])
+    for row in WaitlistEntry.query.filter_by(restaurant_id=g.restaurant_id).order_by(WaitlistEntry.created_at, WaitlistEntry.id):
+        writer.writerow(['waitlist', row.id, row.status, row.party_name, row.party_size, '', row.table_id or '', '', '', row.created_at.isoformat()])
+    response = make_response(stream.getvalue())
+    response.headers['Content-Type'] = 'text/csv; charset=utf-8'
+    response.headers['Content-Disposition'] = 'attachment; filename="occupie-operational-report.csv"'
+    return response
+
+
+@operations_bp.route('/tables/import', methods=['POST'])
+@roles_required('manager')
+def import_tables_csv():
+    payload, error = _payload()
+    if error:
+        return error
+    csv_text = payload.get('csv')
+    if not isinstance(csv_text, str) or not csv_text.strip() or len(csv_text.encode('utf-8')) > 1_000_000:
+        return _error('csv must contain a non-empty table import under 1 MB.', 422, {'csv': 'Invalid input.'})
+    try:
+        reader = csv.DictReader(io.StringIO(csv_text))
+        required = {'id', 'name', 'capacity', 'section'}
+        if not reader.fieldnames or not required.issubset(set(reader.fieldnames)):
+            return _error('CSV headers must include id,name,capacity,section.', 422)
+        rows = list(reader)
+    except csv.Error:
+        return _error('CSV could not be parsed.', 422)
+    if not rows or len(rows) > 500:
+        return _error('Provide between 1 and 500 table rows.', 422)
+    prepared = []
+    seen = set()
+    for line_number, row in enumerate(rows, start=2):
+        table_id = (row.get('id') or '').strip()
+        name = (row.get('name') or '').strip()
+        section = (row.get('section') or '').strip()
+        try:
+            capacity = int((row.get('capacity') or '').strip())
+        except ValueError:
+            capacity = 0
+        if (not table_id or len(table_id) > 32 or table_id in seen or not name or len(name) > 80
+                or not section or len(section) > 80 or capacity < 1 or capacity > 100):
+            return _error(f'CSV row {line_number} has an invalid or duplicate table field.', 422)
+        seen.add(table_id)
+        prepared.append(RestaurantTable(
+            id=table_id, restaurant_id=g.restaurant_id, name=name, capacity=capacity,
+            section=section, status='available',
+        ))
+    existing = RestaurantTable.query.filter(
+        RestaurantTable.restaurant_id == g.restaurant_id,
+        RestaurantTable.id.in_(seen),
+    ).first()
+    if existing:
+        return _error(f'Table {existing.id} already exists; no rows were imported.', 409)
+    db.session.add_all(prepared)
+    for table in prepared:
+        _record_audit('table', table.id, 'table.imported', {'capacity': table.capacity, 'section': table.section})
+    conflict = _commit_or_conflict()
+    if conflict:
+        return conflict
+    return jsonify({'imported': len(prepared), 'tables': [table.to_dict() for table in prepared]}), 201
+
+
+@operations_bp.route('/allocations/simulate', methods=['POST'])
+@roles_required('manager')
+def simulate_allocation():
+    from app.services.adaptive_allocation import recommend_tables
+
+    payload, error = _payload()
+    if error:
+        return error
+    parties = payload.get('parties')
+    if not isinstance(parties, list) or not parties or len(parties) > 20:
+        return _error('parties must contain between 1 and 20 seating requests.', 422)
+    parsed = []
+    for index, party in enumerate(parties):
+        if not isinstance(party, dict) or not _positive_integer(party.get('partySize')):
+            return _error(f'Party {index + 1} must have a positive integer partySize.', 422)
+        try:
+            at = _parse_datetime(party['at']) if party.get('at') else datetime.now(timezone.utc)
+        except ValueError as exc:
+            return _error(str(exc), 422, {'at': str(exc)})
+        preference = party.get('preferredSection')
+        if preference is not None and not isinstance(preference, str):
+            return _error(f'Party {index + 1} preferredSection must be text.', 422)
+        parsed.append((party.get('partyId', str(index + 1)), party['partySize'], at, preference))
+    tables = RestaurantTable.query.filter_by(restaurant_id=g.restaurant_id).all()
+    reservations = Reservation.query.filter_by(restaurant_id=g.restaurant_id).all()
+    settings = _restaurant_settings()
+    claimed = set()
+    results = []
+    for party_id, party_size, at, preference in parsed:
+        candidates = [table for table in tables if table.id not in claimed]
+        choices = recommend_tables(
+            candidates, party_size, reservations=reservations, at=at,
+            preferred_section=preference, restaurant_id=g.restaurant_id,
+            return_all_candidates=False,
+            reservation_hold_minutes=settings.reservation_hold_minutes,
+            turn_time_minutes=settings.turn_time_minutes,
+        )
+        if choices:
+            selected = choices[0]
+            claimed.add(selected.table.id)
+            results.append({'partyId': party_id, 'partySize': party_size, 'table': selected.table.to_dict(), 'reason': selected.reason})
+        else:
+            results.append({'partyId': party_id, 'partySize': party_size, 'table': None, 'reason': _allocation_failure_payload(party_size)['message']})
+    return jsonify({'simulation': results, 'persisted': False}), 200
+
+
 @operations_bp.route('/allocations/recommend', methods=['GET'])
 def allocation_recommendation():
     """Enhanced allocation recommendation using adaptive scoring.
@@ -587,13 +1004,22 @@ def allocation_recommendation():
     return_alternatives = request.args.get('return_alternatives', '').lower() == 'true'
     
     if use_legacy:
-        # Use old deterministic allocator
-        table = _recommendation(party_size, at, preferred_section)
+        # Keep the optional legacy contract for existing clients.
+        settings = _restaurant_settings()
+        tables = RestaurantTable.query.filter_by(restaurant_id=g.restaurant_id).all()
+        reservations = Reservation.query.filter_by(restaurant_id=g.restaurant_id).all()
+        table = recommend_table(
+            tables, party_size, reservations=reservations, at=at,
+            preferred_section=preferred_section,
+            reservation_hold_minutes=settings.reservation_hold_minutes,
+            turn_time_minutes=settings.turn_time_minutes,
+        )
         if table is None:
+            unavailable = _allocation_failure_payload(party_size)
             return jsonify({
                 'available': False,
                 'recommendation': None,
-                'message': 'No suitable table is currently available.',
+                **unavailable,
                 'strategy': 'legacy_deterministic',
             }), 200
         return jsonify({
@@ -608,6 +1034,7 @@ def allocation_recommendation():
     
     tables = RestaurantTable.query.filter_by(restaurant_id=g.restaurant_id).all()
     reservations = Reservation.query.filter_by(restaurant_id=g.restaurant_id).all()
+    settings = _restaurant_settings()
     
     recommendations = recommend_tables(
         tables=tables,
@@ -617,17 +1044,21 @@ def allocation_recommendation():
         preferred_section=preferred_section,
         restaurant_id=g.restaurant_id,
         return_all_candidates=return_alternatives,
+        reservation_hold_minutes=settings.reservation_hold_minutes,
+        turn_time_minutes=settings.turn_time_minutes,
     )
     
     if not recommendations:
+        unavailable = _allocation_failure_payload(party_size)
         return jsonify({
             'available': False,
             'recommendation': None,  # Legacy format
             'primaryRecommendation': None,
             'alternatives': [],
-            'message': 'No suitable table is currently available. Occupied table turnover is not predicted.',
+            **unavailable,
+            'occupiedTurnoverPredicted': False,
             'strategy': 'adaptive_scoring',
-            'configuration': get_policy(g.restaurant_id).to_dict(),
+            'configuration': {**get_policy(g.restaurant_id).to_dict(), **settings.to_dict()},
         }), 200
     
     primary = recommendations[0]
@@ -639,6 +1070,7 @@ def allocation_recommendation():
         'recommendation': primary.table.to_dict(),  # Legacy format for existing tests
         'primaryRecommendation': primary.to_dict(),
         'alternatives': [alt.to_dict() for alt in alternatives],
+        'occupiedTurnoverPredicted': False,
         'strategy': 'adaptive_scoring',
-        'configuration': get_policy(g.restaurant_id).to_dict(),
+        'configuration': {**get_policy(g.restaurant_id).to_dict(), **settings.to_dict()},
     }), 200

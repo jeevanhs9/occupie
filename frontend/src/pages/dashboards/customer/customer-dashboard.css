@@ -170,6 +170,8 @@
 .customer-form__submit { grid-column: 1 / -1; display: flex; justify-content: flex-end; padding-top: .2rem; }
 .customer-suggestion { display: flex; align-items: center; gap: .55rem; margin-top: 1rem; border: 1px solid rgba(107, 130, 88, .26); border-radius: .75rem; background: #f1f5eb; padding: .8rem .95rem; color: #3c5035; font-size: .82rem; }
 .customer-suggestion svg { width: 1.1rem; height: 1.1rem; flex: 0 0 auto; }
+.customer-suggestion--alternatives { flex-wrap: wrap; }
+.customer-no-match-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-top: 1rem; border: 1px solid rgba(151, 104, 63, .25); border-radius: .75rem; background: #fbf7ef; padding: .8rem .95rem; color: #5c4630; font-size: .85rem; }
 .customer-notice { display: flex; align-items: flex-start; gap: .65rem; border: 1px solid; border-radius: .85rem; padding: .85rem 1rem; font-size: .83rem; line-height: 1.5; }
 .customer-notice > svg { width: 1.05rem; height: 1.05rem; flex: 0 0 auto; margin-top: .12rem; }
 .customer-notice > span { flex: 1; }

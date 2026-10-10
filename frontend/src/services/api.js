@@ -1,6 +1,8 @@
 const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 const API_BASE_URL = configuredBaseUrl.replace(/\/$/, '');
-const AUTH_BASE_URL = (import.meta.env.VITE_AUTH_API_URL || '/api/auth').replace(/\/$/, '');
+// Auth and operations are served by the same Flask origin. Derive both paths
+// from VITE_API_BASE_URL so a custom backend host cannot split login from data.
+const AUTH_BASE_URL = API_BASE_URL.replace(/\/api\/v1$/, '/api/auth');
 const API_PROXY_TARGET = import.meta.env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:5000';
 
 // API-backed accounts are the default. Demo fixtures are an explicit preview choice only.
@@ -56,6 +58,25 @@ async function request(endpoint, options = {}) {
   return send(`${API_BASE_URL}${endpoint}`, options);
 }
 
+async function download(endpoint, fileName) {
+  try {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, { credentials: 'include' });
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      return { success: false, status: response.status, error: body?.message || `Request failed with status ${response.status}.` };
+    }
+    const objectUrl = URL.createObjectURL(await response.blob());
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = fileName;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    return { success: true, status: response.status };
+  } catch {
+    return { success: false, isNetworkError: true, error: 'Could not connect to the Occupie API. Confirm the Flask service is running and try again.' };
+  }
+}
+
 const jsonRequest = (method, body) => ({ method, body: JSON.stringify(body) });
 
 export const fetchHealth = () => request('/health');
@@ -79,22 +100,44 @@ export const apiService = {
       `/tables/${encodeURIComponent(tableId)}/status`,
       jsonRequest('PATCH', { status, ...(partySize ? { partySize } : {}) }),
     ),
+    importCSV: (csv) => request('/tables/import', jsonRequest('POST', { csv })),
   },
   reservations: {
     list: () => request('/reservations'),
     create: (reservation) => request('/reservations', jsonRequest('POST', reservation)),
+    requestReassignment: (reservationId, tableId, reason = '') => request(
+      `/reservations/${encodeURIComponent(reservationId)}/reassignment`,
+      jsonRequest('POST', { tableId, reason }),
+    ),
     updateStatus: (reservationId, status) => request(
       `/reservations/${encodeURIComponent(reservationId)}/status`,
       jsonRequest('PATCH', { status }),
     ),
   },
   allocations: {
-    getRecommendations: ({ partySize, at, preferredSection }) => {
+    getRecommendations: ({ partySize, at, preferredSection, returnAlternatives = false }) => {
       const params = new URLSearchParams({ party_size: String(partySize) });
       if (at) params.set('at', at);
       if (preferredSection) params.set('preferred_section', preferredSection);
+      if (returnAlternatives) params.set('return_alternatives', 'true');
       return request(`/allocations/recommend?${params.toString()}`);
     },
+    simulate: (parties) => request('/allocations/simulate', jsonRequest('POST', { parties })),
+  },
+  settings: {
+    get: () => request('/settings/allocation'),
+    update: (settings) => request('/settings/allocation', jsonRequest('PATCH', settings)),
+  },
+  reports: {
+    shift: () => request('/reports/shift'),
+    exportCSV: () => download('/reports/export.csv', 'occupie-operational-report.csv'),
+  },
+  reassignments: {
+    list: () => request('/reassignments'),
+    review: (requestId, status) => request(
+      `/reassignments/${encodeURIComponent(requestId)}/status`,
+      jsonRequest('PATCH', { status }),
+    ),
   },
   waitlist: {
     list: () => request('/waitlist'),

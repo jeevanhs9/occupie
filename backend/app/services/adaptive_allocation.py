@@ -8,8 +8,10 @@ This replaces the simple deterministic allocator with configurable optimization.
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
+from dataclasses import replace
 
 from app.services.allocation_policy import AllocationPolicy, get_policy
+from app.services.allocation import reservation_conflicts
 
 
 @dataclass
@@ -56,12 +58,8 @@ def _as_utc(value):
 
 
 def _reservation_conflicts(reservation, at, hold_minutes) -> bool:
-    """Check if reservation protects its table at the given time."""
-    if reservation.status not in ('confirmed', 'checked_in'):
-        return False
-    starts_at = _as_utc(reservation.starts_at)
-    requested_at = _as_utc(at)
-    return abs((starts_at - requested_at).total_seconds()) < hold_minutes * 60
+    """Compatibility wrapper for the shared reservation interval rule."""
+    return reservation_conflicts(reservation, at, hold_minutes)
 
 
 def _calculate_capacity_score(
@@ -265,6 +263,8 @@ def recommend_tables(
     preferred_section: str = None,
     restaurant_id: str = 'default',
     return_all_candidates: bool = False,
+    reservation_hold_minutes: int = None,
+    turn_time_minutes: int = 90,
 ) -> List[TableRecommendation]:
     """Generate scored table recommendations using adaptive allocation.
     
@@ -288,16 +288,20 @@ def recommend_tables(
     else:
         at = _as_utc(at)
     
-    if not isinstance(party_size, int) or party_size < 1:
+    if not isinstance(party_size, int) or isinstance(party_size, bool) or party_size < 1:
         return []
     
     # Get restaurant-specific policy
     policy = get_policy(restaurant_id)
+    if reservation_hold_minutes is not None:
+        policy = replace(policy, reservation_hold_minutes=reservation_hold_minutes)
     
     # Identify held tables
     held_table_ids = {
         r.table_id for r in reservations
-        if r.table_id and _reservation_conflicts(r, at, policy.reservation_hold_minutes)
+        if r.table_id and reservation_conflicts(
+            r, at, policy.reservation_hold_minutes, turn_time_minutes
+        )
     }
     
     # Filter to feasible candidates

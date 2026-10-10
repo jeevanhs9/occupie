@@ -33,7 +33,7 @@ function getStatusStyle(status) {
   if (status === 'confirmed' || status === 'ready') return 'success';
   if (status === 'checked_in') return 'info';
   if (status === 'cancelled' || status === 'no_show') return 'danger';
-  if (status === 'seated') return 'teal';
+  if (status === 'seated' || status === 'completed') return 'teal';
   return 'default';
 }
 
@@ -130,6 +130,9 @@ export function CustomerDashboard({ page = 'hub' }) {
   const [bookingNotice, setBookingNotice] = useState(null);
   const [waitlistNotice, setWaitlistNotice] = useState(null);
   const [suggestedTable, setSuggestedTable] = useState(null);
+  const [suggestedAlternatives, setSuggestedAlternatives] = useState([]);
+  const [suggestionReason, setSuggestionReason] = useState('');
+  const [bookingNoMatch, setBookingNoMatch] = useState(null);
   const [bookingPending, setBookingPending] = useState(false);
   const [waitlistPending, setWaitlistPending] = useState(false);
   const [pendingReservation, setPendingReservation] = useState(null);
@@ -142,10 +145,8 @@ export function CustomerDashboard({ page = 'hub' }) {
   }, [demoMode, refreshWaitlist, waitlist.length]);
 
   const { upcoming, history } = useMemo(() => {
-    const now = Date.now();
     const isHistory = (reservation) => (
-      ['seated', 'cancelled', 'no_show'].includes(reservation.status)
-      || (reservation.startsAt && new Date(reservation.startsAt).getTime() < now)
+      ['seated', 'completed', 'cancelled', 'no_show'].includes(reservation.status)
     );
     return {
       upcoming: reservations
@@ -159,6 +160,9 @@ export function CustomerDashboard({ page = 'hub' }) {
 
   const handleBookingChange = (field, value) => {
     setSuggestedTable(null);
+    setSuggestedAlternatives([]);
+    setSuggestionReason('');
+    setBookingNoMatch(null);
     setBookingNotice(null);
     setBookingForm((form) => ({ ...form, [field]: value }));
   };
@@ -193,13 +197,18 @@ export function CustomerDashboard({ page = 'hub' }) {
       const result = await recommendReservation(request);
       setBookingPending(false);
       if (!result.success) {
-        setBookingNotice({ type: 'error', message: `No suitable table is available: ${result.error}` });
+        setSuggestedAlternatives(result.alternatives || []);
+        setBookingNoMatch(result.nextActions || { joinWaitlist: true });
+        setBookingNotice({ type: 'error', message: result.error || 'No suitable table is available for that party and time.' });
         return;
       }
       setSuggestedTable(result.data.recommendation);
+      setSuggestedAlternatives(result.data.alternatives || []);
+      setSuggestionReason(result.data.reason || 'This table fits your party and is available for the requested time.');
+      setBookingNoMatch(null);
       setBookingNotice({
         type: 'info',
-        message: `${result.data.recommendation.name} is currently suggested for your party. Confirm to request this table; availability is checked again when saved.`,
+        message: `${result.data.recommendation.name} is suggested for your party. Confirm to request it; availability is checked again when saved.`,
       });
       return;
     }
@@ -213,15 +222,32 @@ export function CustomerDashboard({ page = 'hub' }) {
     setBookingPending(false);
     if (!result.success) {
       setBookingNotice({ type: 'error', message: `Reservation not placed: ${result.error}` });
-      if (result.status === 409) setSuggestedTable(null);
+      if (result.status === 409) {
+        setSuggestedTable(null);
+        setSuggestedAlternatives([]);
+        setBookingNoMatch({ changeDateTime: true, joinWaitlist: true });
+      }
       return;
     }
     const reservation = result.data.reservation;
     const confirmedTime = reservation.startsAt
       ? new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date(reservation.startsAt))
       : reservation.time;
-    setBookingNotice({ type: 'success', message: `Reservation confirmed for ${confirmedTime || formatReservationDate(reservation.startsAt)} at table ${reservation.table}.` });
+    setBookingNotice({ type: 'success', message: `Reservation confirmed for ${confirmedTime || formatReservationDate(reservation.startsAt)} at table ${reservation.table}. Reference: ${reservation.id}.` });
     setSuggestedTable(null);
+    setSuggestedAlternatives([]);
+    setBookingNoMatch(null);
+  };
+
+  const handleJoinWaitlistFromBooking = async () => {
+    if (waitlistPending) return;
+    setWaitlistPending(true);
+    const result = await createWaitlistEntry({ partyName: user?.name, partySize: Number(bookingForm.partySize) });
+    setWaitlistPending(false);
+    setBookingNotice(result.success
+      ? { type: 'success', message: 'You joined the walk-in waitlist. Your entry is available on Upcoming Bookings.' }
+      : { type: 'error', message: `Could not join the waitlist: ${result.error}` });
+    if (result.success) setBookingNoMatch(null);
   };
 
   const handleReservationStatus = async (reservation, status) => {
@@ -251,7 +277,6 @@ export function CustomerDashboard({ page = 'hub' }) {
       setWaitlistNotice({ type: 'error', message: `Could not join the waitlist: ${result.error}` });
       return;
     }
-    await refreshWaitlist();
     setWaitlistPending(false);
     setWaitlistNotice({ type: 'success', message: 'You have joined the walk-in waitlist.' });
   };
@@ -266,7 +291,6 @@ export function CustomerDashboard({ page = 'hub' }) {
       setWaitlistNotice({ type: 'error', message: `Could not leave the waitlist: ${result.error}` });
       return;
     }
-    await refreshWaitlist();
     setPendingWaitlist(null);
     setWaitlistNotice({ type: 'success', message: 'You have left the waitlist.' });
   };
@@ -341,7 +365,29 @@ export function CustomerDashboard({ page = 'hub' }) {
             {suggestedTable && (
               <div className="customer-suggestion" role="note">
                 <CheckCircle2 aria-hidden="true" />
-                <span>Suggested table: <strong>{suggestedTable.name}</strong> · {suggestedTable.capacity} seats · {suggestedTable.section}</span>
+                <span>Suggested table: <strong>{suggestedTable.name}</strong> · {suggestedTable.capacity} seats · {suggestedTable.section}. {suggestionReason}</span>
+              </div>
+            )}
+            {suggestedAlternatives.length > 0 && (
+              <div className="customer-suggestion customer-suggestion--alternatives" role="group" aria-label="Alternative table options">
+                <span>Other tables that fit:</span>
+                {suggestedAlternatives.map((option) => {
+                  const table = option.table || option;
+                  return (
+                    <Button key={table.id} type="button" size="sm" variant="outline" onClick={() => {
+                      setSuggestedTable(table);
+                      setSuggestionReason(option.reason || 'This table is another available fit for your party.');
+                      setBookingNoMatch(null);
+                      setBookingNotice({ type: 'info', message: `${table.name} selected. Confirm to save the reservation.` });
+                    }}>{table.name}</Button>
+                  );
+                })}
+              </div>
+            )}
+            {bookingNoMatch?.joinWaitlist && (
+              <div className="customer-no-match-actions" role="group" aria-label="Availability next steps">
+                <p>Try another date or party size, or join the walk-in waitlist.</p>
+                <Button type="button" variant="secondary" isLoading={waitlistPending} disabled={waitlistPending} onClick={handleJoinWaitlistFromBooking}>Join walk-in waitlist</Button>
               </div>
             )}
           </CardContent>
@@ -354,6 +400,8 @@ export function CustomerDashboard({ page = 'hub' }) {
         <SectionHeading id="customer-upcoming-title" eyebrow="Reserved for you" title="Upcoming reservations" icon={TicketCheck} />
         {loading && reservations.length === 0 ? (
           <LoadingPanel label="Loading your reservations" />
+        ) : error && reservations.length === 0 ? (
+          <p role="status" className="customer-empty">Reservations could not be loaded. Use Retry above to try again.</p>
         ) : upcoming.length ? (
           <div className="customer-record-list">
             {upcoming.map((reservation) => (
@@ -396,6 +444,8 @@ export function CustomerDashboard({ page = 'hub' }) {
         {waitlistNotice && <Notice notice={waitlistNotice} onDismiss={() => setWaitlistNotice(null)} />}
         {loading && waitlist.length === 0 ? (
           <LoadingPanel label="Checking your waitlist status" />
+        ) : error && waitlist.length === 0 ? (
+          <p role="status" className="customer-waitlist__empty">Waitlist status could not be loaded. Use Retry above to try again.</p>
         ) : waitlist.length ? (
           <div className="customer-waitlist__entries">
             {waitlist.map((entry) => (
@@ -428,7 +478,11 @@ export function CustomerDashboard({ page = 'hub' }) {
 
       {page === 'history' && <section id="history" className="customer-section customer-history scroll-mt-24" aria-labelledby="customer-history-title">
         <SectionHeading id="customer-history-title" eyebrow="Your visits" title="Dining history" icon={History} />
-        {history.length ? (
+        {loading && history.length === 0 ? (
+          <LoadingPanel label="Loading dining history" />
+        ) : error && history.length === 0 ? (
+          <p role="status" className="customer-empty">Dining history could not be loaded. Use Retry above to try again.</p>
+        ) : history.length ? (
           <div className="customer-record-list">
             {history.map((reservation) => <ReservationCard key={reservation.id} reservation={reservation} onStatusChange={handleReservationStatus} pending={null} />)}
           </div>

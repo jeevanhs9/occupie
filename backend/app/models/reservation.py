@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from sqlalchemy import Index, text
 from app.extensions import db
 
-RESERVATION_STATUSES = ('confirmed', 'checked_in', 'seated', 'cancelled', 'no_show')
+RESERVATION_STATUSES = ('confirmed', 'checked_in', 'seated', 'completed', 'cancelled', 'no_show')
 
 
 class Reservation(db.Model):
@@ -33,6 +33,8 @@ class Reservation(db.Model):
     preferred_section = db.Column(db.String(80), nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    seated_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    completed_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
     table = db.relationship('RestaurantTable', backref='reservations')
     restaurant = db.relationship('Restaurant')
@@ -57,4 +59,38 @@ class Reservation(db.Model):
             'phone': self.phone,
             'notes': self.notes,
             'seatingPreference': self.preferred_section,
+            'seatedAt': self.seated_at.isoformat() if self.seated_at else None,
+            'completedAt': self.completed_at.isoformat() if self.completed_at else None,
+        }
+
+
+class ReservationReassignment(db.Model):
+    """A host request that a manager review a reservation table change."""
+
+    __tablename__ = 'reservation_reassignments'
+
+    id = db.Column(db.String(40), primary_key=True)
+    restaurant_id = db.Column(db.String(36), db.ForeignKey('restaurants.id', ondelete='CASCADE'), nullable=False, index=True)
+    reservation_id = db.Column(db.String(40), db.ForeignKey('reservations.id', ondelete='CASCADE'), nullable=False, index=True)
+    from_table_id = db.Column(db.String(32), db.ForeignKey('restaurant_tables.id'), nullable=False)
+    to_table_id = db.Column(db.String(32), db.ForeignKey('restaurant_tables.id'), nullable=False)
+    requested_by_user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    reviewed_by_user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    reason = db.Column(db.String(500), nullable=True)
+    status = db.Column(db.String(16), nullable=False, default='pending', index=True)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    reviewed_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'reservationId': self.reservation_id,
+            'fromTable': self.from_table_id,
+            'toTable': self.to_table_id,
+            'reason': self.reason,
+            'status': self.status,
+            'requestedByUserId': self.requested_by_user_id,
+            'reviewedByUserId': self.reviewed_by_user_id,
+            'createdAt': self.created_at.isoformat() if self.created_at else None,
+            'reviewedAt': self.reviewed_at.isoformat() if self.reviewed_at else None,
         }

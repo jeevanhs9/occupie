@@ -9,7 +9,7 @@ def test_customer_to_floor_staff_service_workflow(
         'name': 'Window Table',
         'capacity': 4,
         'section': 'Window Patio',
-        'assignedServer': 'Demo Floor Staff',
+        'assignedServer': 'Test floor_staff',
     })
     assert table.status_code == 201
 

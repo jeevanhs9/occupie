@@ -8,6 +8,7 @@ import { Button } from '../../../components/ui/Button';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { Input } from '../../../components/ui/Input';
 import { useOperationalData } from '../../../hooks/useOperationalData';
+import { apiService } from '../../../services/api';
 import { nextSeatableWaitlistEntry, recommendTable } from '../../../services/allocation';
 import {
   UserPlus,
@@ -81,6 +82,8 @@ export function HostDashboard() {
     updateWaitlistStatus,
     seatReservation,
     updateReservationStatus,
+    requestReservationReassignment,
+    recommendReservation,
   } = useOperationalData();
   const prefersReducedMotion = useReducedMotion();
   const [actionNotice, setActionNotice] = useState(null);
@@ -90,6 +93,10 @@ export function HostDashboard() {
   const [pendingActions, setPendingActions] = useState(() => new Set());
   const [confirmNoShowId, setConfirmNoShowId] = useState(null);
   const [confirmRemoveId, setConfirmRemoveId] = useState(null);
+  const [reservationSearch, setReservationSearch] = useState('');
+  const [reassignmentTargets, setReassignmentTargets] = useState({});
+  const [gracePeriodMinutes, setGracePeriodMinutes] = useState(15);
+  const [serverRecommendations, setServerRecommendations] = useState({});
   const [clock, setClock] = useState(() => Date.now());
   const actionLocks = useRef(new Set());
   const walkInLock = useRef(false);
@@ -98,6 +105,15 @@ export function HostDashboard() {
     const timer = window.setInterval(() => setClock(Date.now()), 60_000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (demoMode) return undefined;
+    let active = true;
+    apiService.settings.get().then((result) => {
+      if (active && result.success) setGracePeriodMinutes(result.data.settings.gracePeriodMinutes ?? 15);
+    });
+    return () => { active = false; };
+  }, [demoMode]);
 
   const canSeat = (partySize) => tables.filter((table) =>
     recommendTable({ tables: [table], reservations, partySize }).table
@@ -115,12 +131,42 @@ export function HostDashboard() {
       return String(reservationTime(left)).localeCompare(String(reservationTime(right)));
     }), [reservations]);
 
+  const visibleReservations = useMemo(() => {
+    const query = reservationSearch.trim().toLocaleLowerCase();
+    if (!query) return activeReservations;
+    return activeReservations.filter((reservation) => [reservation.guestName, reservation.id, reservation.table, reservation.phone]
+      .some((value) => String(value || '').toLocaleLowerCase().includes(query)));
+  }, [activeReservations, reservationSearch]);
+
   const orderedWalkIns = useMemo(() => [...walkIns]
     .filter((entry) => ['waiting', 'ready'].includes(entry.status))
     .sort((left, right) => arrivalTimestamp(left, clock) - arrivalTimestamp(right, clock)
       || String(left.id).localeCompare(String(right.id))), [walkIns, clock]);
 
-  const nextSeatable = nextSeatableWaitlistEntry({ waitlist: orderedWalkIns, tables, reservations });
+  const waitlistKey = walkIns.filter((entry) => ['waiting', 'ready'].includes(entry.status))
+    .map((entry) => `${entry.id}:${entry.partySize}`).join('|');
+  useEffect(() => {
+    if (demoMode) return undefined;
+    let active = true;
+    const at = new Date().toISOString();
+    Promise.all(orderedWalkIns.map(async (entry) => {
+      const result = await recommendReservation({ partySize: entry.partySize, startsAt: at });
+      return [entry.id, result.success
+        ? { table: result.data.recommendation, reason: result.data.reason }
+        : { table: null, reason: result.error || 'No suitable table is available.' }];
+    })).then((pairs) => {
+      if (active) setServerRecommendations(Object.fromEntries(pairs));
+    });
+    return () => { active = false; };
+  }, [demoMode, waitlistKey, recommendReservation]);
+
+  const localNextSeatable = nextSeatableWaitlistEntry({ waitlist: orderedWalkIns, tables, reservations });
+  const serverNextEntry = orderedWalkIns.find((entry) => serverRecommendations[entry.id]?.table);
+  const nextSeatable = demoMode
+    ? localNextSeatable
+    : serverNextEntry
+      ? { entry: serverNextEntry, table: serverRecommendations[serverNextEntry.id].table, reason: serverRecommendations[serverNextEntry.id].reason }
+      : { entry: null, table: null, reason: orderedWalkIns.length ? (serverRecommendations[orderedWalkIns[0].id]?.reason || 'Checking current availability with the restaurant API.') : 'No parties are waiting.' };
   const nextSeatableId = nextSeatable.entry?.id;
   const dataUnavailable = loading || Boolean(error);
 
@@ -146,6 +192,31 @@ export function HostDashboard() {
       ? { type: 'success', message: `Seated ${reservation.guestName} at ${result.data.table?.id || reservation.table}.` }
       : { type: 'error', message: `Could not seat ${reservation.guestName}: ${result.error}` });
   });
+
+  const handleCheckIn = (reservation) => runAction(`reservation:${reservation.id}`, async () => {
+    const result = await updateReservationStatus(reservation.id, 'checked_in');
+    setActionNotice(result.success
+      ? { type: 'success', message: `${reservation.guestName} checked in.` }
+      : { type: 'error', message: `Could not check in ${reservation.guestName}: ${result.error}` });
+  });
+
+  const handleRequestReassignment = (reservation) => runAction(`reassign:${reservation.id}`, async () => {
+    const targetId = reassignmentTargets[reservation.id];
+    if (!targetId) {
+      setActionNotice({ type: 'error', message: 'Choose an available table to request a change.' });
+      return;
+    }
+    const result = await requestReservationReassignment(reservation.id, targetId, 'Host requested a table change');
+    setActionNotice(result.success
+      ? { type: 'success', message: `Table change request for ${reservation.guestName} was sent to a manager.` }
+      : { type: 'error', message: `Could not request a table change: ${result.error}` });
+  });
+
+  const isNoShowEligible = (reservation) => {
+    if (demoMode) return true;
+    const startsAt = new Date(reservation.startsAt || reservation.time).getTime();
+    return Number.isFinite(startsAt) && clock >= startsAt + gracePeriodMinutes * 60_000;
+  };
 
   const handleSeatWalkIn = (entry) => runAction(`waitlist:${entry.id}`, async () => {
     const result = await seatWaitlistEntry(entry.id);
@@ -351,10 +422,13 @@ export function HostDashboard() {
               <CardDescription>Arrivals are ordered by booking time. Table assignment is checked again when seating.</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              {activeReservations.length ? (
+              <div className="p-4">
+                <Input label="Search reservations" value={reservationSearch} onChange={(event) => setReservationSearch(event.target.value)} placeholder="Guest, reference, table, or phone" />
+              </div>
+              {visibleReservations.length ? (
                 <div className="divide-y divide-stone-200/80">
                   <AnimatePresence initial={false}>
-                    {activeReservations.map((reservation, index) => {
+                    {visibleReservations.map((reservation, index) => {
                       const pending = pendingActions.has(`reservation:${reservation.id}`);
                       const confirmingNoShow = confirmNoShowId === reservation.id;
                       return (
@@ -381,13 +455,25 @@ export function HostDashboard() {
                             {reservation.phone && <p className="host-dashboard__contact">{reservation.phone}</p>}
                           </div>
                           <div className="host-dashboard__reservation-actions">
-                            <Button size="sm" variant="secondary" onClick={() => handleSeatReservation(reservation)} disabled={pending} isLoading={pending}>
-                              Seat guest
-                            </Button>
-                            <Button size="sm" variant="ghost" onClick={() => setConfirmNoShowId(confirmingNoShow ? null : reservation.id)} disabled={pending}>
+                            {reservation.status === 'confirmed' ? (
+                              <Button size="sm" variant="secondary" onClick={() => handleCheckIn(reservation)} disabled={pending} isLoading={pending}>Check in</Button>
+                            ) : (
+                              <Button size="sm" variant="secondary" onClick={() => handleSeatReservation(reservation)} disabled={pending} isLoading={pending}>Seat guest</Button>
+                            )}
+                            <Button size="sm" variant="ghost" onClick={() => setConfirmNoShowId(confirmingNoShow ? null : reservation.id)} disabled={pending || !isNoShowEligible(reservation)} title={!isNoShowEligible(reservation) ? `No-show becomes available after the ${gracePeriodMinutes}-minute arrival grace period.` : undefined}>
                               No-show
                             </Button>
                           </div>
+                          {!demoMode && ['confirmed', 'checked_in'].includes(reservation.status) && (
+                            <div className="host-dashboard__reservation-reassignment">
+                              <label className="sr-only" htmlFor={`reassign-${reservation.id}`}>New table for {reservation.guestName}</label>
+                              <select id={`reassign-${reservation.id}`} value={reassignmentTargets[reservation.id] || ''} onChange={(event) => setReassignmentTargets((current) => ({ ...current, [reservation.id]: event.target.value }))}>
+                                <option value="">Choose another table</option>
+                                {tables.filter((table) => table.status === 'available' && table.id !== reservation.table && table.capacity >= reservation.partySize).map((table) => <option key={table.id} value={table.id}>{table.name} · {table.capacity} seats</option>)}
+                              </select>
+                              <Button size="sm" variant="outline" onClick={() => handleRequestReassignment(reservation)} disabled={pending || !reassignmentTargets[reservation.id]}>Request manager approval</Button>
+                            </div>
+                          )}
                           <AnimatePresence initial={false}>
                             {confirmingNoShow && (
                               <motion.div
@@ -412,7 +498,7 @@ export function HostDashboard() {
                   </AnimatePresence>
                 </div>
               ) : (
-                <EmptyState title={loading ? 'Loading reservations' : error ? 'Schedule unavailable' : 'No active reservations'} description={loading ? 'The reservation schedule is being refreshed.' : error ? 'Retry the data request to load the current bookings.' : 'New bookings will appear here when they are created.'} />
+                <EmptyState title={loading ? 'Loading reservations' : error ? 'Schedule unavailable' : reservationSearch ? 'No matching reservations' : 'No active reservations'} description={loading ? 'The reservation schedule is being refreshed.' : error ? 'Retry the data request to load the current bookings.' : reservationSearch ? 'Try another name, reference, table, or phone number.' : 'New bookings will appear here when they are created.'} />
               )}
             </CardContent>
           </Card>
@@ -434,7 +520,9 @@ export function HostDashboard() {
                 <ol className="divide-y divide-stone-200/80">
                   <AnimatePresence initial={false}>
                     {orderedWalkIns.map((entry, index) => {
-                      const recommendation = recommendTable({ tables, reservations, partySize: entry.partySize });
+                      const recommendation = demoMode
+                        ? recommendTable({ tables, reservations, partySize: entry.partySize })
+                        : serverRecommendations[entry.id] || { table: null, reason: 'Checking current availability with the restaurant API.' };
                       const isNext = entry.id === nextSeatableId;
                       const pending = pendingActions.has(`waitlist:${entry.id}`);
                       const confirmingRemoval = confirmRemoveId === entry.id;
@@ -470,11 +558,11 @@ export function HostDashboard() {
                               variant={entry.status === 'ready' ? 'accent' : 'secondary'}
                               className="host-dashboard__allocate"
                               onClick={() => handleSeatWalkIn(entry)}
-                              disabled={pending || !recommendation.table}
+                              disabled={pending || !recommendation.table || (!demoMode && !serverRecommendations[entry.id])}
                               isLoading={pending}
                               title="Seating is confirmed immediately; availability is rechecked by the service."
                             >
-                              {entry.status === 'ready' ? 'Table Ready' : 'Allocate'}
+                              Seat party
                             </Button>
                             <Button
                               size="sm"

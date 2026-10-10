@@ -33,6 +33,17 @@ def test_table_management_and_status_validation(manager_client):
     assert response.status_code == 422
 
 
+def test_non_object_json_body_returns_validation_error(manager_client):
+    response = manager_client.post(
+        '/api/v1/reservations',
+        data='[]',
+        content_type='application/json',
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()['message'] == 'Request body must be a JSON object.'
+
+
 def test_allocation_chooses_smallest_suitable_available_table(manager_client):
     create_table(manager_client, 'T01', 6)
     create_table(manager_client, 'T02', 4)

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useRole } from '../../hooks/useRole';
 import { ROLE_NAVIGATION, ROLE_CONFIGS } from '../../lib/constants';
 import Logo from '../common/Logo';
@@ -113,25 +113,37 @@ export function Sidebar({ isOpen, onClose }) {
             const targetHash = targetAnchor ? `#${targetAnchor}` : '';
             const isItemActive = location.pathname === targetPath && location.hash === targetHash;
             return (
-              <NavLink
+              <Link
                 key={`${item.label}-${idx}`}
                 to={item.path}
                 onClick={onClose}
-                className={() =>
-                  `flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                    isItemActive
-                      ? 'bg-occupie-burgundy-800 text-white font-semibold shadow-sm border border-occupie-brass-500/30'
-                      : 'text-slate-400 hover:text-slate-100 hover:bg-occupie-navy-850'
-                  }`
-                }
+                aria-current={isItemActive ? 'page' : undefined}
+                className={`flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  isItemActive
+                    ? 'bg-occupie-burgundy-800 text-white font-semibold shadow-sm border border-occupie-brass-500/30'
+                    : 'text-slate-400 hover:text-slate-100 hover:bg-occupie-navy-850'
+                }`}
               >
                 <div className="flex items-center gap-3">
                   <Icon className="w-4 h-4 text-occupie-teal-400" />
                   <span>{item.label}</span>
                 </div>
-              </NavLink>
+              </Link>
             );
           })}
+
+          <div className="pt-4 mt-4 border-t border-occupie-navy-800/60">
+            <Link
+              to="/"
+              onClick={onClose}
+              className="flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-medium transition-colors text-slate-400 hover:text-slate-100 hover:bg-occupie-navy-850"
+            >
+              <div className="flex items-center gap-3">
+                <Store className="w-4 h-4 text-occupie-teal-400" />
+                <span>About Occupie</span>
+              </div>
+            </Link>
+          </div>
         </nav>
 
         {/* User Card & Logout */}

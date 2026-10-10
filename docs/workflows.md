@@ -1,84 +1,61 @@
 # Occupie workflows (current code audit)
 
-This describes behavior found in the current React pages and registered Flask API. It distinguishes real API behavior from the development-only local preview.
+**Verified:** 2026-10-11. This guide describes registered Flask routes and the current React workflows. Automated tests and a browser smoke run used an isolated migrated/seeded SQLite database. It does not claim production deployment or PostgreSQL behavior.
 
-## Account creation and sign in
+## Authentication and role selection
 
-### Registration
+- Public registration at `POST /api/auth/register` always creates a customer. Public signup cannot assign staff roles.
+- Login sets a short-lived HTTP-only JWT access cookie and a CSRF cookie. The frontend restores the profile through `GET /api/auth/me`; writes send the CSRF value in `X-CSRF-TOKEN`.
+- Staff accounts are provisioned from a trusted backend terminal with `flask --app run provision-staff`. `RestaurantMembership` determines the staff role for the configured restaurant. Users without a membership are customers.
+- Browser route gates redirect signed-out users to login and redirect an authenticated user away from another role's dashboard. The API independently enforces roles and customer ownership.
+- Email verification, password reset, and refresh-token flows are not registered. Production CORS origins and secure-cookie settings must be configured for the actual deployed site.
 
-1. A visitor submits name, email, and a 12–128 character password on `/auth/register`.
-2. `POST /api/auth/register` creates a customer account with a Werkzeug password hash. Any submitted role is ignored; the handler assigns `customer`.
-3. The page shows the API message. It does not sign the user in automatically; the user returns to login.
+## Customer booking and reservation history
 
-Email verification is not part of the current account flow. Historical verification columns remain in the existing schema for compatibility but are not read or written by the current routes.
+1. The customer chooses party size, a future date/time, and optional section on `/dashboard/customer/book`.
+2. `GET /api/v1/allocations/recommend` returns the best fit and alternatives or a structured no-match with supported next actions.
+3. The customer confirms. `POST /api/v1/reservations` checks the table and booking interval again and returns the persisted reservation ID/reference.
+4. Upcoming and history pages use the signed-in customer's reservations. The API filters rows by `customer_id`; the customer can cancel or check in only to their own eligible reservation.
+5. `completed` reservations appear in history. Completion is a staff action from a seated reservation and moves its table to `cleaning`.
 
-### Login, session restore, and logout
+Allocation is single-table: capacity must be at least party size. There is no joined-table model. The configured hold interval before a reservation and turn interval after it are checked for overlap against the proposed seating interval. Confirmed, checked-in, and seated reservations are active conflicts; cancelled, completed, and no-show records do not hold a table. Allocation never predicts that an occupied table will turn over.
 
-1. The user submits email/password to `POST /api/auth/login`.
-2. On success, the API sets a short-lived HTTP-only access JWT cookie and returns a user profile including role and default `restaurantId`.
-3. `useRole` stores the profile in memory. The role route is selected from the server profile; demo role state is not used in API mode.
-4. On app startup, the client calls `GET /api/auth/me`. An expired access token returns 401 and the user signs in again.
-5. Logout calls `POST /api/auth/logout`, supplies a CSRF token, and clears/revokes session cookies. A client logout failure leaves the current profile in place and exposes an auth error.
+When allocation has no match, the customer page shows the API reason and available next steps. The waitlist action is shown only when the API indicates that joining the queue is a supported action. Waitlist position and elapsed queue time may be shown; a future wait estimate is not computed.
 
-**Authorization:** public registration creates customers only. Trusted staff provisioning creates `RestaurantMembership` records for manager, host, or floor staff. The role used by the profile is the membership role for `DEFAULT_RESTAURANT_ID`, or customer if none exists.
+## Host reservation and walk-in service
 
-## Customer reservation
+- The host workspace loads current tables, active reservation records, and the waiting/ready queue from the API. API-mode reservation and walk-in seating recommendations use the server allocator.
+- Reservation search filters the loaded host list. A host can check a guest in, seat an eligible reservation, request a table reassignment, or mark a booking no-show after the configured grace period.
+- A reassignment request names an available fitting target. It remains pending until a manager approves or rejects it; approval rechecks capacity, current status, and conflicting booking intervals.
+- Hosts add and update walk-in queue entries. Seating uses the oldest currently serviceable party and rechecks a single table on the server. A successful seat updates the waitlist entry and table together.
+- The no-show grace is configurable from 0 to 120 minutes (default 15). No automatic no-show job or customer reminder runs.
 
-1. The customer opens `/dashboard/customer/book`, enters party size, date/time, optional seating preference, phone, and notes.
-2. `useOperationalData` calls `GET /api/v1/allocations/recommend?party_size=…&at=…&preferred_section=…`. The API checks restaurant tables and protects confirmed/checked-in reservation assignments within a 90-minute window.
-3. If a table is recommended, the page submits `POST /api/v1/reservations` with `partySize`, ISO `startsAt`, optional `tableId`, `seatingPreference`, `phone`, and `notes`. The server derives `guestName` and `customer_id` from the authenticated user; the browser cannot book for a different customer identity.
-4. The API validates the timestamp and request, rechecks availability, and creates a `confirmed` reservation for one table. It returns 409 if availability changed or no table fits.
-5. Upcoming and history pages load the user's reservations through `GET /api/v1/reservations`; the backend filters customer results by the signed-in user.
+Reservation list display and menu controls were smoke-tested in a browser. Host queue seating and reassignment approval are covered by API/workflow tests; those mutations still need a judge-facing manual walkthrough on the target environment.
 
-**Capacity matching:** an exact table size is not required. The allocator picks a table at least as large as the party, preferring the requested section, then the smallest surplus capacity, then stable table ID. If no single table fits, reservation creation returns 409. Combining multiple tables is not supported by the model or allocator.
+## Floor-staff table service
 
-**Conflict handling:** the request is validated again at creation, and a supplied recommended `tableId` is not blindly trusted. Active reservation time conflicts use a 90-minute protection window. PostgreSQL row locks are used while assigning a table. SQLite does not honor those row locks, so local SQLite does not provide the same concurrent-request guarantee.
+Floor staff can view and update only tables whose `assigned_server` string exactly matches the authenticated account's display name. This is a free-form name match, not a staff identity foreign key; managers must enter the display name exactly when assigning a table.
 
-## Customer cancellation and check-in
+The API enforces table transitions: `available` can move to occupied, reserved, or cleaning; `reserved` can move to available; `occupied` can move to cleaning; and `cleaning` can move to available. Occupied status requires a party size that fits. Reservation and waitlist seating also set a table occupied. The floor-staff browser smoke test verified its assigned-table list and a cleaning-to-available update.
 
-- A customer can transition their own `confirmed` reservation to `cancelled` or `checked_in` using `PATCH /api/v1/reservations/{id}/status`.
-- The server rejects a customer status change for another user's reservation and rejects unsupported status transitions.
-- A host or manager can perform operational status changes, including `seated` and `no_show`, subject to the transition rules.
-- Seating a reservation changes the reservation status and its table to `occupied`, recording party size and seating time.
-- Cancelling a reservation removes it from the active reservation hold set. There is no notification sent to the customer.
+## Manager workspace
 
-## Host reservation and walk-in seating
+Managers can create tables and manage allocation settings. The settings are restaurant-scoped: turn time (15–360 minutes), reservation hold (0–360), no-show grace (0–120), and utilization target (1–100%). The allocator and reservation transitions use these values.
 
-### Reservations
+Manager-only endpoints provide:
 
-The host loads restaurant reservations and tables, creates a guest reservation through the same reservations endpoint, and marks an arrived party checked in or seated. Host/manager dashboard recommendation cards call the browser-side `services/allocation.js` helper over loaded records; customer booking recommendations call the server endpoint. The backend checks reservation transitions and table availability before seating. If the assigned table is unavailable, occupied, undersized, or protected for another booking, seating returns 409 and leaves the request unresolved for staff action. Because the browser helper reduces reservation times to time-of-day while the server compares full timestamps, suggestions can disagree across dates; the backend remains authoritative when a seating action is submitted.
+- `GET /api/v1/reports/shift`: current table/reservation/waitlist counts, occupied-table utilization against the target, and an average turn duration from completed reservations with seated/completed timestamps. This is a current-state snapshot, not a date-filtered shift or historical trend service.
+- `GET /api/v1/reports/export.csv`: operational table, reservation, and waitlist rows from the API.
+- `POST /api/v1/tables/import`: insert-only table import from JSON `{ "csv": "id,name,capacity,section\\n..." }`; it accepts 1–500 rows under 1 MB and rejects duplicates without importing a partial batch.
+- `POST /api/v1/allocations/simulate`: non-persistent allocation plan for 1–20 requested parties. It conservatively claims each selected table across the submitted sequence.
+- `GET/PATCH /api/v1/settings/allocation` and `GET /api/v1/reassignments`, `PATCH /api/v1/reassignments/{id}/status`.
 
-### Walk-in queue
+The manager UI reads current operational data and these endpoints. Historical revenue is not stored. The allocation score has a fixed heuristic revenue-opportunity factor; its score/reason is not actual revenue or a revenue forecast. No production report/export or import workflow was run in the browser audit.
 
-1. A host adds a walk-in with party name, party size, and optional contact using `POST /api/v1/waitlist`.
-2. The party enters `waiting`; a host/manager can move it to `ready` or cancel it using `PATCH /api/v1/waitlist/{id}`.
-3. Seating uses `POST /api/v1/waitlist/{id}/seat`, optionally with a requested `tableId`. If omitted, the server selects a suitable single table.
-4. The server protects reservation holds and prioritizes the oldest currently serviceable waiting/ready party. On success it sets the waitlist entry to `seated` and the table to `occupied` in the same request.
+## Data refresh, errors, and scope limits
 
-Customers may also create one active waitlist entry for themselves, view only their own active entries, and cancel their own entry. The customer API response includes queue position. The model returns elapsed `waitMinutes`; `quotedWait` is always `null`.
+API requests use `VITE_API_BASE_URL` (default `/api/v1`); the client derives `/api/auth` from the same origin. Local Vite proxies `/api/*` to Flask. Credentialed cross-origin requests require the exact frontend origin in `FRONTEND_ORIGINS`. Mutation hooks refresh affected server data; API errors are displayed instead of presenting a failed request as an empty restaurant.
 
-## Floor staff occupancy updates
+API data refreshes on page entry and after user actions. There is no websocket/SSE or other live push channel. The frontend has no restaurant picker and normally uses `DEFAULT_RESTAURANT_ID`. PostgreSQL production, cross-origin production CORS, and browser behavior on the final demo host still require manual validation.
 
-Floor staff can read tables, reservations, and waitlist entries, and can use `PATCH /api/v1/tables/{id}/status` for table service state. Marking a table occupied requires a positive `partySize` that fits and an available table. Setting another allowed status clears current party size and `timeSeated`; setting `available` is the current way to mark a vacated/cleaned table available.
-
-The status endpoint supports `available`, `occupied`, `reserved`, and `cleaning`. Reservation seating and waitlist seating also set `occupied`. The API does not track a separate customer departure event or connect a table departure to reservation completion.
-
-## Late arrival and no-show handling
-
-The reservation model has a `no_show` status and the API allows staff to set it from `confirmed` or `checked_in`. This is a manual action. There is no configured grace period, automatic late-arrival transition, scheduled job, or customer reminder. A host must decide whether to retain or mark the reservation; the code does not infer arrival from elapsed time.
-
-## Manager reporting
-
-The manager dashboard shows current tables/reservations/waitlist and derived current-state cards. Some preview metrics are drawn from labeled demo fixtures; live unavailable historical fields such as average turnover display as unavailable. The shift CSV is generated in the browser from the currently loaded data. There is no analytics/revenue endpoint, durable report job, or historical revenue model in the registered API.
-
-## Unsupported or partial capabilities
-
-- No combined-table allocation for larger parties.
-- No reliable wait-time estimate or occupied-table turnover prediction; waitlist `quotedWait` is null.
-- No automatic late-arrival/no-show job or reminder.
-- No reservation, waitlist, or table live push notifications. Customer waitlist and health displays use polling; operational data otherwise refreshes on page mount/manual action.
-- No revenue reporting or historical analytics service/API.
-- Restaurant scoping exists on the backend, but the frontend has no restaurant picker and does not send `X-Restaurant-ID`; normal UI traffic resolves to the configured default tenant.
-- Email delivery is used for configured account actions only; there are no reservation lifecycle emails.
-
-For exact request and response shapes, see [api-contract.md](api-contract.md).
+For the feature-by-feature status, command results, and outstanding priorities, see [FEATURE_GAP_AUDIT.md](FEATURE_GAP_AUDIT.md) and [FINAL_READINESS_AUDIT.md](FINAL_READINESS_AUDIT.md).

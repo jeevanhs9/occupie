@@ -12,11 +12,11 @@ PowerShell:
 
 ```powershell
 cd backend
-python -m venv venv
-.\venv\Scripts\Activate.ps1
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
-flask db upgrade
+flask --app run db upgrade
 python run.py
 ```
 
@@ -28,7 +28,7 @@ In a second terminal:
 
 ```powershell
 cd frontend
-npm install
+npm ci
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 npm run dev
 ```
@@ -43,7 +43,7 @@ Public registration always creates a customer. Create staff accounts only from a
 
 ```powershell
 cd backend
-flask provision-staff --name "Restaurant Manager" --email manager@example.com --role manager
+flask --app run provision-staff --name "Restaurant Manager" --email manager@example.com --role manager
 ```
 
 The CLI securely prompts for the password and assigns a restaurant membership. Roles are `manager`, `host`, or `floor_staff`. The default restaurant ID comes from `DEFAULT_RESTAURANT_ID` (defaults to `default`); the CLI creates it if it does not exist. Use `--restaurant-id` to assign staff to an existing restaurant.
@@ -79,16 +79,17 @@ In production, configure `COOKIE_SECURE=true`, a PostgreSQL `DATABASE_URL`, both
 | Variable | Purpose |
 |---|---|
 | `VITE_API_BASE_URL` | Operations API base, normally `/api/v1` for the local Vite proxy |
-| `VITE_AUTH_API_URL` | Auth API base, normally `/api/auth` for the local Vite proxy |
 | `VITE_API_PROXY_TARGET` | Flask origin Vite proxies to during development; defaults to `http://127.0.0.1:5000` |
 | `VITE_DATA_MODE` | `api` by default; choose `demo` explicitly for fixtures |
 | `VITE_OCCUPIE_CHAT_WEBHOOK` | Optional existing chat endpoint; leave blank to use its configured app default |
 
+Auth requests derive `/api/auth` from `VITE_API_BASE_URL`, so sign-in and operations use the same Flask origin.
+
 ## Database migrations
 
-Run `flask db upgrade` after setting backend environment variables. The committed initial revision creates all required tables on a new database and adds auth and restaurant scoping columns to the original development schema while keeping existing records. Check status with `flask db current` and inspect future changes with `flask db migrate -m "description"` before applying them.
+The migration chain currently ends at `a6b7c8d9e012`. The two latest revisions add restaurant allocation settings and reservation lifecycle timestamps, then manager-reviewed reservation reassignment records. They are additive; the application requires these revisions before using the new settings, reports, completion, or reassignment paths. Check status with `flask --app run db current` and inspect future changes with `flask --app run db migrate -m "description"` before applying them.
 
-Development app startup can create missing tables for convenience, but it does not replace migration commands for schema changes. Take a database backup before production migrations.
+The app does not create tables automatically at startup. Run `flask --app run db upgrade` against the intended database before starting the API. This keeps new and existing databases on the same Alembic migration path. Back up the intended database before production migrations. This audit validated a fresh SQLite upgrade and an upgrade from a populated scratch database at `e880f4e1dce4`; it did not migrate the existing local database or validate PostgreSQL migration behavior.
 
 ## Authentication
 
@@ -98,11 +99,11 @@ Authentication consists of customer registration, login, logout, and `GET /api/a
 
 ```powershell
 cd backend
-.\venv\Scripts\python.exe -m pytest -v
+.\.venv\Scripts\python.exe -m pytest -v
 
 cd ..\frontend
-npm test
+npm test -- --run
 npm run build
 ```
 
-The backend suite uses in-memory SQLite by default. For PostgreSQL-specific concurrency validation, set `TEST_DATABASE_URL` to an isolated test database before running tests; never point it at production data.
+The backend suite uses in-memory SQLite by default. The audited run reported 87 backend tests and 38 frontend tests passing; the production PostgreSQL deployment and concurrency path remain untested. For PostgreSQL-specific validation, set `TEST_DATABASE_URL` to an isolated test database before running tests; never point it at production data.

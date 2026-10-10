@@ -16,14 +16,20 @@ describe('API-backed operational data mode', () => {
   it('loads API state and updates the queue and table only after successful responses', async () => {
     vi.stubEnv('VITE_DATA_MODE', 'api');
     vi.resetModules();
+    const tableRows = [{ id: 'T01', name: 'Table 1', capacity: 2, status: 'available' }];
+    const waitlistRows = [];
     const fetch = vi.fn(async (url, options = {}) => {
-      if (url.endsWith('/tables') && (!options.method || options.method === 'GET')) return jsonResponse({ tables: [{ id: 'T01', name: 'Table 1', capacity: 2, status: 'available' }] });
+      if (url.endsWith('/tables') && (!options.method || options.method === 'GET')) return jsonResponse({ tables: tableRows });
       if (url.endsWith('/reservations') && (!options.method || options.method === 'GET')) return jsonResponse({ reservations: [] });
-      if (url.endsWith('/waitlist') && (!options.method || options.method === 'GET')) return jsonResponse({ waitlist: [] });
+      if (url.endsWith('/waitlist') && (!options.method || options.method === 'GET')) return jsonResponse({ waitlist: waitlistRows });
       if (url.endsWith('/waitlist') && options.method === 'POST') {
-        return jsonResponse({ waitlistEntry: { id: 'WL-API', partyName: 'API Party', partySize: 2, status: 'waiting', waitMinutes: 0, quotedWait: null } }, 201);
+        const entry = { id: 'WL-API', partyName: 'API Party', partySize: 2, status: 'waiting', waitMinutes: 0, quotedWait: null };
+        waitlistRows.push(entry);
+        return jsonResponse({ waitlistEntry: entry }, 201);
       }
       if (url.endsWith('/waitlist/WL-API/seat')) {
+        waitlistRows.splice(0, waitlistRows.length);
+        tableRows[0] = { ...tableRows[0], status: 'occupied', partySize: 2 };
         return jsonResponse({
           waitlistEntry: { id: 'WL-API', partyName: 'API Party', partySize: 2, status: 'seated', table: 'T01' },
           table: { id: 'T01', name: 'Table 1', capacity: 2, status: 'occupied', partySize: 2 },

@@ -63,11 +63,11 @@ export function useOperationalData() {
     if (!demoMode) {
       const result = await apiService.tables.updateStatus(tableId, status, partySize);
       if (!result.success) {
-        setError(resultError(result));
         return result;
       }
       setTables((current) => current.map((table) => table.id === tableId ? result.data.table : table));
       setError(null);
+      await refresh();
       return result;
     }
 
@@ -86,17 +86,17 @@ export function useOperationalData() {
       timeSeated: status === 'occupied' ? (table.timeSeated || 'Just now') : null,
     } : table));
     return { success: true, data: { table: target } };
-  }, [demoMode, reservations, tables]);
+  }, [demoMode, reservations, tables, refresh]);
 
   const createTable = useCallback(async (table) => {
     if (!demoMode) {
       const result = await apiService.tables.create(table);
       if (!result.success) {
-        setError(resultError(result));
         return result;
       }
       setTables((current) => [...current, result.data.table].sort((left, right) => left.id.localeCompare(right.id, undefined, { numeric: true })));
       setError(null);
+      await refresh();
       return result;
     }
     if (tables.some((existing) => existing.id === table.id)) {
@@ -105,17 +105,17 @@ export function useOperationalData() {
     const created = { ...table, status: 'available', partySize: 0, timeSeated: null };
     setTables((current) => [...current, created].sort((left, right) => left.id.localeCompare(right.id, undefined, { numeric: true })));
     return { success: true, data: { table: created } };
-  }, [demoMode, tables]);
+  }, [demoMode, tables, refresh]);
 
   const createWaitlistEntry = useCallback(async (entry) => {
     if (!demoMode) {
       const result = await apiService.waitlist.create(entry);
       if (!result.success) {
-        setError(resultError(result));
         return result;
       }
       setWaitlist((current) => [...current, result.data.waitlistEntry]);
       setError(null);
+      await refreshWaitlist();
       return result;
     }
 
@@ -128,7 +128,7 @@ export function useOperationalData() {
     };
     setWaitlist((current) => [...current, created]);
     return { success: true, data: { waitlistEntry: created } };
-  }, [demoMode]);
+  }, [demoMode, refreshWaitlist]);
 
   const seatWaitlistEntry = useCallback(async (entryId) => {
     const entry = waitlist.find((item) => item.id === entryId);
@@ -137,12 +137,12 @@ export function useOperationalData() {
     if (!demoMode) {
       const result = await apiService.waitlist.seat(entryId);
       if (!result.success) {
-        setError(resultError(result));
         return result;
       }
       setWaitlist((current) => current.filter((item) => item.id !== entryId));
       setTables((current) => current.map((table) => table.id === result.data.table.id ? result.data.table : table));
       setError(null);
+      await refresh();
       return result;
     }
 
@@ -160,24 +160,24 @@ export function useOperationalData() {
     setTables((current) => current.map((candidate) => candidate.id === table.id ? seatedAt : candidate));
     setWaitlist((current) => current.filter((item) => item.id !== entryId));
     return { success: true, data: { waitlistEntry: { ...entry, status: 'seated', table: table.id }, table: seatedAt } };
-  }, [demoMode, reservations, tables, waitlist]);
+  }, [demoMode, reservations, tables, waitlist, refresh]);
 
   const updateWaitlistStatus = useCallback(async (entryId, status) => {
     if (!demoMode) {
       const result = await apiService.waitlist.updateStatus(entryId, status);
       if (!result.success) {
-        setError(resultError(result));
         return result;
       }
       if (status === 'cancelled') setWaitlist((current) => current.filter((entry) => entry.id !== entryId));
       else setWaitlist((current) => current.map((entry) => entry.id === entryId ? result.data.waitlistEntry : entry));
       setError(null);
+      await refreshWaitlist();
       return result;
     }
     if (status === 'cancelled') setWaitlist((current) => current.filter((entry) => entry.id !== entryId));
     else setWaitlist((current) => current.map((entry) => entry.id === entryId ? { ...entry, status } : entry));
     return { success: true };
-  }, [demoMode]);
+  }, [demoMode, refreshWaitlist]);
 
   const recommendReservation = useCallback(async ({ partySize, startsAt, seatingPreference }) => {
     if (!demoMode) {
@@ -185,15 +185,28 @@ export function useOperationalData() {
         partySize,
         at: startsAt,
         preferredSection: seatingPreference,
+        returnAlternatives: true,
       });
       if (!result.success) {
-        setError(resultError(result));
         return result;
       }
       if (!result.data?.available || !result.data.recommendation) {
-        return { success: false, error: result.data?.message || 'No suitable table is available.' };
+        return {
+          success: false,
+          error: result.data?.message || 'No suitable table is available.',
+          reasonCode: result.data?.reasonCode,
+          nextActions: result.data?.nextActions,
+          alternatives: result.data?.alternatives || [],
+        };
       }
-      return { success: true, data: { recommendation: result.data.recommendation } };
+      return {
+        success: true,
+        data: {
+          recommendation: result.data.primaryRecommendation?.table || result.data.recommendation,
+          reason: result.data.primaryRecommendation?.reason,
+          alternatives: result.data.alternatives || [],
+        },
+      };
     }
 
     const recommendation = recommendTable({
@@ -212,11 +225,11 @@ export function useOperationalData() {
     if (!demoMode) {
       const result = await apiService.reservations.create(reservation);
       if (!result.success) {
-        setError(resultError(result));
         return result;
       }
       setReservations((current) => [...current, result.data.reservation]);
       setError(null);
+      await refresh();
       return result;
     }
 
@@ -237,7 +250,7 @@ export function useOperationalData() {
     };
     setReservations((current) => [...current, created]);
     return { success: true, data: { reservation: created } };
-  }, [demoMode, reservations, tables]);
+  }, [demoMode, reservations, tables, refresh]);
 
   const seatReservation = useCallback(async (reservationId) => {
     const reservation = reservations.find((item) => item.id === reservationId);
@@ -245,7 +258,6 @@ export function useOperationalData() {
     if (!demoMode) {
       const result = await apiService.reservations.updateStatus(reservationId, 'seated');
       if (!result.success) {
-        setError(resultError(result));
         return result;
       }
       setReservations((current) => current.map((item) => item.id === reservationId ? result.data.reservation : item));
@@ -256,6 +268,7 @@ export function useOperationalData() {
         timeSeated: new Date().toISOString(),
       } : table));
       setError(null);
+      await refresh();
       return result;
     }
 
@@ -275,22 +288,29 @@ export function useOperationalData() {
     setTables((current) => current.map((item) => item.id === seatedTable.id ? seatedTable : item));
     setReservations((current) => current.map((item) => item.id === reservationId ? seatedReservation : item));
     return { success: true, data: { reservation: seatedReservation, table: seatedTable } };
-  }, [demoMode, reservations, tables]);
+  }, [demoMode, reservations, tables, refresh]);
 
   const updateReservationStatus = useCallback(async (reservationId, status) => {
     if (!demoMode) {
       const result = await apiService.reservations.updateStatus(reservationId, status);
       if (!result.success) {
-        setError(resultError(result));
         return result;
       }
       setReservations((current) => current.map((item) => item.id === reservationId ? result.data.reservation : item));
       setError(null);
+      await refresh();
       return result;
     }
     setReservations((current) => current.map((item) => item.id === reservationId ? { ...item, status } : item));
     return { success: true };
-  }, [demoMode]);
+  }, [demoMode, refresh]);
+
+  const requestReservationReassignment = useCallback(async (reservationId, tableId, reason) => {
+    if (demoMode) return { success: false, error: 'Reassignment requests require the restaurant API.' };
+    const result = await apiService.reservations.requestReassignment(reservationId, tableId, reason);
+    if (result.success) await refresh();
+    return result;
+  }, [demoMode, refresh]);
 
   return {
     dataMode: DATA_MODE,
@@ -311,5 +331,6 @@ export function useOperationalData() {
     createReservation,
     seatReservation,
     updateReservationStatus,
+    requestReservationReassignment,
   };
 }
