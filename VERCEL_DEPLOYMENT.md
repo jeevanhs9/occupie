@@ -187,36 +187,76 @@ Or connect to the database and insert directly (see schema in `backend/app/model
 
 ## Vercel Project Structure
 
-### File: `vercel.json`
+### Multi-Service Configuration
+
+Occupie uses Vercel's **services** feature for optimal monorepo deployment:
+
+#### Root: `vercel.json`
 
 ```json
 {
-  "version": 2,
-  "builds": [
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "backend": {
+      "root": "backend",
+      "framework": "flask"
+    },
+    "frontend": {
+      "root": "frontend",
+      "framework": "vite"
+    }
+  },
+  "rewrites": [
     {
-      "src": "frontend/package.json",
-      "use": "@vercel/static-build",
-      "config": { "distDir": "dist" }
+      "source": "/api/(.*)",
+      "destination": { "service": "backend" }
     },
     {
-      "src": "backend/api/index.py",
-      "use": "@vercel/python"
+      "source": "/(.*)",
+      "destination": { "service": "frontend" }
     }
-  ],
-  "routes": [
-    { "src": "/api/(.*)", "dest": "/backend/api/index.py" },
-    { "src": "/(.*)", "dest": "/frontend/$1" }
   ]
 }
 ```
 
-### File: `backend/api/index.py`
+#### Backend: `backend/vercel.json`
+
+```json
+{
+  "builds": [
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "api/index.py"
+    }
+  ]
+}
+```
+
+#### Frontend: `frontend/vercel.json`
+
+```json
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "framework": "vite"
+}
+```
+
+#### Backend Entry: `backend/api/index.py`
 
 Entry point for serverless functions. Imports and exposes the Flask app.
 
-### File: `.vercelignore`
-
-Excludes unnecessary files (tests, docs, node_modules) from deployment.
+**Benefits:**
+- Separate deployment units
+- Independent scaling
+- Clearer service boundaries
+- Better caching strategies
 
 ---
 

@@ -112,30 +112,60 @@ User Browser
 
 ---
 
-## File Structure on Vercel
+## Vercel Configuration
 
-### After Build
+Occupie uses Vercel's **multi-service** architecture for optimal deployment:
+
+### File Structure
 
 ```
-E:\Occupie\                    Vercel Deployment
+E:\Occupie\
+├── vercel.json                 ← Root config (routes services)
 ├── frontend/
-│   ├── dist/                  → Served from CDN
-│   │   ├── index.html         → Entry point
-│   │   └── assets/
-│   │       ├── index.css      → Optimized CSS
-│   │       └── index.js       → Bundled JS
-│   └── package.json
+│   ├── vercel.json            ← Frontend service config
+│   ├── package.json
+│   └── dist/                  ← Build output
 ├── backend/
+│   ├── vercel.json            ← Backend service config
 │   ├── api/
-│   │   └── index.py           → Serverless entry point
-│   ├── app/
-│   │   ├── __init__.py        → Flask app factory
-│   │   ├── models/            → Deployed with function
-│   │   ├── routes/            → Deployed with function
-│   │   └── services/          → Deployed with function
-│   └── requirements.txt       → Python dependencies
-└── vercel.json                → Deployment config
+│   │   ├── index.py           ← Serverless entry point
+│   │   └── requirements.txt   ← Python dependencies
+│   └── app/                   ← Flask application
 ```
+
+### Root vercel.json
+
+```json
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "backend": {
+      "root": "backend",
+      "framework": "flask"
+    },
+    "frontend": {
+      "root": "frontend",
+      "framework": "vite"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": { "service": "backend" }
+    },
+    {
+      "source": "/(.*)",
+      "destination": { "service": "frontend" }
+    }
+  ]
+}
+```
+
+This configuration:
+- Treats backend and frontend as separate services
+- Routes `/api/*` to backend service
+- Routes everything else to frontend service
+- Allows independent scaling and deployment
 
 ---
 

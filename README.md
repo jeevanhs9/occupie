@@ -229,22 +229,26 @@ See `backend/app/services/adaptive_allocation.py` and [the feature gap audit](do
 
 ### Vercel Deployment (Recommended)
 
-Occupie is optimized for deployment on Vercel with automatic scaling and global CDN.
+Occupie is optimized for deployment on Vercel with **multi-service architecture** for automatic scaling and global CDN.
+
+**Architecture:**
+- **Frontend Service:** Static site (Vite build) on Vercel CDN
+- **Backend Service:** Serverless functions (Python/Flask) on Vercel
+- **Database:** Vercel Postgres or external PostgreSQL
+- **Routing:** `/api/*` → Backend Service | Everything else → Frontend Service
 
 **Quick Deploy:**
 1. Push code to GitHub
 2. Import repository to [Vercel](https://vercel.com/new)
-3. Add environment variables (see `.env.vercel.example`)
-4. Deploy!
+3. Vercel auto-detects multi-service configuration
+4. Add environment variables (see `.env.vercel.example`)
+5. Deploy!
 
-**Complete Guide:** See [VERCEL_DEPLOYMENT.md](./VERCEL_DEPLOYMENT.md)  
-**Deployment Checklist:** See [DEPLOYMENT_CHECKLIST.md](./DEPLOYMENT_CHECKLIST.md)
-
-**Architecture:**
-- **Frontend:** Static site (Vite build) on Vercel CDN
-- **Backend:** Serverless functions (Python/Flask) on Vercel
-- **Database:** Vercel Postgres or external PostgreSQL
-- **Routing:** `/api/*` → Backend | Everything else → Frontend
+**Documentation:**
+- **[GITHUB_TO_VERCEL.md](./GITHUB_TO_VERCEL.md)** - Step-by-step GitHub → Vercel guide
+- **[VERCEL_MULTI_SERVICE_SETUP.md](./VERCEL_MULTI_SERVICE_SETUP.md)** - Multi-service architecture explained
+- **[VERCEL_DEPLOYMENT.md](./VERCEL_DEPLOYMENT.md)** - Complete deployment reference
+- **[DEPLOYMENT_CHECKLIST.md](./DEPLOYMENT_CHECKLIST.md)** - Verification checklist
 
 **Monthly Cost Estimate:**
 - Small restaurant (1 location): **Free tier** (sufficient)
