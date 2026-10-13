@@ -42,12 +42,15 @@ backend/.venv/
 .env
 .env.*
 !.env.example
+!.env.vercel.example
 frontend/.env
 frontend/.env.*
 !frontend/.env.example
 backend/.env
 backend/.env.*
 !backend/.env.example
+.env.production
+.env.production.local
 
 # Database & SQLite files
 *.sqlite3
@@ -73,3 +76,8 @@ Thumbs.db
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Vercel
+.vercel
+.vercel/**
+*.vercel.json.backup

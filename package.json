@@ -1,0 +1,32 @@
+{
+  "name": "occupie-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Occupie restaurant management system - Vercel deployment configuration",
+  "scripts": {
+    "install:frontend": "cd frontend && npm install",
+    "install:backend": "cd backend && pip install -r requirements.txt",
+    "build": "cd frontend && npm run build",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && python run.py",
+    "test:frontend": "cd frontend && npm test",
+    "test:backend": "cd backend && pytest -v",
+    "vercel-build": "cd frontend && npm install && npm run build"
+  },
+  "workspaces": [
+    "frontend"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/occupie.git"
+  },
+  "keywords": [
+    "restaurant",
+    "reservations",
+    "table-management",
+    "seating",
+    "hospitality"
+  ],
+  "author": "Your Name",
+  "license": "PROPRIETARY"
+}

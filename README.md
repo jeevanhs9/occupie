@@ -225,6 +225,33 @@ See `backend/app/services/adaptive_allocation.py` and [the feature gap audit](do
 - The frontend has no restaurant picker and uses the configured default restaurant.
 - Production deployment, PostgreSQL migrations, and PostgreSQL concurrency have not been exercised in this audit.
 
+## Production Deployment
+
+### Vercel Deployment (Recommended)
+
+Occupie is optimized for deployment on Vercel with automatic scaling and global CDN.
+
+**Quick Deploy:**
+1. Push code to GitHub
+2. Import repository to [Vercel](https://vercel.com/new)
+3. Add environment variables (see `.env.vercel.example`)
+4. Deploy!
+
+**Complete Guide:** See [VERCEL_DEPLOYMENT.md](./VERCEL_DEPLOYMENT.md)  
+**Deployment Checklist:** See [DEPLOYMENT_CHECKLIST.md](./DEPLOYMENT_CHECKLIST.md)
+
+**Architecture:**
+- **Frontend:** Static site (Vite build) on Vercel CDN
+- **Backend:** Serverless functions (Python/Flask) on Vercel
+- **Database:** Vercel Postgres or external PostgreSQL
+- **Routing:** `/api/*` → Backend | Everything else → Frontend
+
+**Monthly Cost Estimate:**
+- Small restaurant (1 location): **Free tier** (sufficient)
+- Restaurant chain (3-10 locations): **$40/month** (Vercel Pro + Postgres)
+
+---
+
 ## Security Features
 
 - HTTP-only cookies with CSRF protection

@@ -31,8 +31,18 @@ Start here for comprehensive overview:
 | Document | Purpose | Audience |
 |----------|---------|----------|
 | [README.md](README.md) | Project overview, quick start, setup | Everyone |
+| [QUICK_DEPLOY.md](QUICK_DEPLOY.md) | ⚡ 10-minute Vercel deployment | Deployers |
 | [SETUP.md](docs/SETUP.md) | Detailed setup instructions, production config | Developers, DevOps |
 | [TEAM_WORKFLOW.md](docs/TEAM_WORKFLOW.md) | Git workflow, development practices | Developers |
+
+### 1.5. Deployment & Production
+
+| Document | Purpose | Audience |
+|----------|---------|----------|
+| **[VERCEL_DEPLOYMENT.md](VERCEL_DEPLOYMENT.md)** | 📚 Complete Vercel deployment guide | DevOps, Deployers |
+| **[DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md)** | ✅ Step-by-step deployment verification | DevOps, Deployers |
+| **[VERCEL_ARCHITECTURE.md](docs/VERCEL_ARCHITECTURE.md)** | 🏗️ Architecture diagrams and data flow | Architects, DevOps |
+| [.env.vercel.example](.env.vercel.example) | Environment variable template | Deployers |
 
 ### 2. Demo & Presentation
 
@@ -317,6 +327,9 @@ A: [README.md](README.md) for overview, then follow a learning path above
 **Q: How do I demo this?**  
 A: [DEMO_RESOURCES.md](DEMO_RESOURCES.md) has everything you need
 
+**Q: How do I deploy to production?**  
+A: [QUICK_DEPLOY.md](QUICK_DEPLOY.md) for 10-minute deploy or [VERCEL_DEPLOYMENT.md](VERCEL_DEPLOYMENT.md) for complete guide
+
 **Q: How do I set up for development?**  
 A: [SETUP.md](docs/SETUP.md) has detailed instructions
 
@@ -328,6 +341,9 @@ A: [IMPLEMENTATION_CHECKLIST.md](docs/IMPLEMENTATION_CHECKLIST.md) has status
 
 **Q: How does the allocation algorithm work?**  
 A: [DEMO_DATA_REFERENCE.md](docs/DEMO_DATA_REFERENCE.md) has detailed explanation + code at `backend/app/services/adaptive_allocation.py`
+
+**Q: How is this deployed?**  
+A: [VERCEL_ARCHITECTURE.md](docs/VERCEL_ARCHITECTURE.md) shows the complete architecture
 
 ---
 

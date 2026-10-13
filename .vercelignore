@@ -1,0 +1,46 @@
+# Vercel ignore file - exclude unnecessary files from deployment
+
+# Python
+backend/__pycache__
+backend/**/__pycache__
+backend/.pytest_cache
+backend/**/.pytest_cache
+backend/venv
+backend/.venv
+backend/instance/*.db
+*.pyc
+*.pyo
+*.pyd
+
+# Node
+frontend/node_modules
+node_modules
+
+# Tests
+backend/tests
+frontend/src/test
+
+# Documentation
+docs
+*.md
+!README.md
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local environment files
+.env.local
+.env.development
+backend/.env
+frontend/.env
